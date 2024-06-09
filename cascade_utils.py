@@ -16,6 +16,8 @@ def clamp(val, min, max):
         return val
 
 
+# Original implementation by Jordach licensed under AGPL-3.0
+# https://github.com/Jordach/CAPGUI/blob/45ec3e60c64c94b26728e5a2c5f0eb1c152f41a1/cap_util/__init__.py#L181-L210
 def compression_curve(x):
     return math.pow(x, 0.9)
 

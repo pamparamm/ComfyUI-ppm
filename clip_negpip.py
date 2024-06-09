@@ -1,4 +1,6 @@
-# Original implementation by laksjdjf: https://github.com/laksjdjf/cd-tuner_negpip-ComfyUI/blob/938b838546cf774dc8841000996552cef52cccf3/negpip.py#L43
+# Original implementation by laksjdjf and hako-mikan licensed under AGPL-3.0
+# https://github.com/laksjdjf/cd-tuner_negpip-ComfyUI/blob/938b838546cf774dc8841000996552cef52cccf3/negpip.py#L43-L84
+# https://github.com/hako-mikan/sd-webui-negpip
 from functools import partial
 import torch
 
@@ -6,7 +8,14 @@ from comfy import model_management
 from comfy.model_patcher import ModelPatcher
 from comfy.sd import CLIP
 from comfy.sd1_clip import SD1ClipModel, gen_empty_tokens, ClipTokenWeightEncoder
-from comfy.sdxl_clip import SDXLClipModel
+from comfy.sdxl_clip import SDXLClipModel, SDXLRefinerClipModel
+
+
+def has_negpip(model_options: dict):
+    try:
+        return "negpip_attn" in map(lambda _: _.__class__.__name__, model_options["transformer_options"]["patches"]["attn2_patch"])
+    except KeyError:
+        return False
 
 
 class CLIPNegPip:
@@ -81,32 +90,22 @@ class CLIPNegPip:
                 return out[-1:].to(model_management.intermediate_device()), first_pooled
             return torch.cat(output, dim=-2).to(model_management.intermediate_device()), first_pooled
 
-        def encode_token_weights_negpip_sd1(_self: SD1ClipModel, token_weight_pairs):
-            token_weight_pairs = token_weight_pairs[_self.clip_name]
-            out, pooled = encode_token_weights_negpip(getattr(_self, _self.clip), token_weight_pairs)
-            return out, pooled
+        clip_model = type(c.cond_stage_model)
+        valid_models = [SD1ClipModel, SDXLClipModel, SDXLRefinerClipModel]
+        is_clip_patched = False
 
-        def encode_token_weights_negpip_sdxl(_self: SDXLClipModel, token_weight_pairs):
-            token_weight_pairs_g = token_weight_pairs["g"]
-            token_weight_pairs_l = token_weight_pairs["l"]
-            g_out, g_pooled = encode_token_weights_negpip(_self.clip_g, token_weight_pairs_g)
-            l_out, l_pooled = encode_token_weights_negpip(_self.clip_l, token_weight_pairs_l)
-            return torch.cat([l_out, g_out], dim=-1), g_pooled
-
-        encode_func = None
-
-        match c.cond_stage_model:
-            case SDXLClipModel():
-                encode_func = encode_token_weights_negpip_sdxl
-            case SD1ClipModel():
-                encode_func = encode_token_weights_negpip_sd1
-
-        if encode_func:
-            c.patcher.add_object_patch("encode_token_weights", partial(encode_func, c.patcher.model))
-            try:
-                if negpip_attn.__class__ not in map(lambda _: _.__class__, m.model_options["transformer_options"]["patches"]["attn2_patch"]):
+        if clip_model in valid_models:
+            if hasattr(c.patcher.model, "clip_g"):
+                c.patcher.add_object_patch("clip_g.encode_token_weights", partial(encode_token_weights_negpip, c.patcher.model.clip_g))
+                is_clip_patched = True
+            if hasattr(c.patcher.model, "clip_l"):
+                c.patcher.add_object_patch("clip_l.encode_token_weights", partial(encode_token_weights_negpip, c.patcher.model.clip_l))
+                is_clip_patched = True
+            if is_clip_patched:
+                try:
+                    if negpip_attn.__class__ not in map(lambda _: _.__class__, m.model_options["transformer_options"]["patches"]["attn2_patch"]):
+                        m.set_model_attn2_patch(negpip_attn)
+                except KeyError:
                     m.set_model_attn2_patch(negpip_attn)
-            except KeyError:
-                m.set_model_attn2_patch(negpip_attn)
 
         return (m, c)

@@ -8,7 +8,7 @@ class RandomPromptGenerator:
             "required": {
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFFFFFFFFFF}),
                 "length": ("INT", {"default": 10, "min": 1, "max": 20}),
-                "weight": ("FLOAT", {"default": 1.4, "min": 0.0, "max": 10.0, "step": 0.01}),
+                "weight": ("FLOAT", {"default": 1.4, "min": -10.0, "max": 10.0, "step": 0.01}),
             }
         }
 
@@ -20,6 +20,6 @@ class RandomPromptGenerator:
     def generate(self, seed, length, weight):
         generator = random.Random(seed)
         alphabet = "abcdefghijklmnopqrstupvxyz1234567890"
-        hash = "".join(generator.choice(alphabet) for _ in range(length))
-        hash_weighted = f"({hash}:{weight})"
-        return (hash_weighted,)
+        prompt = "".join(generator.choice(alphabet) for _ in range(length))
+        prompt_weighted = f"({prompt}:{weight})" if weight != 1.0 else prompt
+        return (prompt_weighted,)

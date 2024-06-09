@@ -1,7 +1,7 @@
 import math
 
 from comfy.sd import CLIP
-from nodes import CLIPTextEncode, ConditioningConcat, MAX_RESOLUTION
+from nodes import ConditioningConcat, MAX_RESOLUTION
 from node_helpers import conditioning_set_values
 
 
@@ -20,16 +20,20 @@ class CLIPTextEncodeBREAK:
 
     CATEGORY = "conditioning"
 
+    SEPARATOR = "BREAK"
+
     def encode(self, clip: CLIP, text: str):
-        encode_node = CLIPTextEncode()
         concat_node = ConditioningConcat()
 
-        chunks = text.split("BREAK")
+        chunks = text.split(self.SEPARATOR)
 
-        cond_concat = encode_node.encode(clip, chunks[0].strip())[0]
-        for chunk in chunks[1:]:
-            cond = encode_node.encode(clip, chunk.strip())[0]
-            cond_concat = concat_node.concat(cond_concat, cond)[0]
+        cond_concat = None
+        for chunk in chunks:
+            chunk = chunk.strip()
+            tokens = clip.tokenize(chunk)
+            cond, pooled = clip.encode_from_tokens(tokens, return_pooled=True)
+            conditioning = [[cond, {"pooled_output": pooled}]]
+            cond_concat = concat_node.concat(cond_concat, conditioning)[0] if cond_concat else conditioning
 
         return (cond_concat,)
 
@@ -69,57 +73,42 @@ class CLIPMicroConditioning:
         return (c,)
 
 
-class CLIPSetLastLayerFloat:
+class CLIPTokenCounter:
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
+                "text": ("STRING", {"multiline": True}),
                 "clip": ("CLIP",),
-                "stop_at_clip_layer": ("FLOAT", {"default": -1, "min": -24, "max": -1, "step": 0.05}),
+                "debug_print": ("BOOLEAN", {"default": False}),
             }
         }
 
-    RETURN_TYPES = ("CLIP",)
-    FUNCTION = "set_last_layer"
+    RETURN_TYPES = ("STRING",)
+    FUNCTION = "encode"
 
-    CATEGORY = "conditioning"
+    OUTPUT_NODE = True
 
-    def encode_from_tokens_patched(self, clip: CLIP, stop_at_clip_layer):
-        def encode_from_tokens(tokens, return_pooled=False):
-            clip.cond_stage_model.reset_clip_options()
+    def encode(self, clip: CLIP, text: str, debug_print: bool):
+        lengths = []
+        blocks = []
+        special_tokens = set(clip.cond_stage_model.clip_l.special_tokens.values())
+        vocab = clip.tokenizer.clip_l.inv_vocab
+        prompts = text.split("BREAK")
+        for prompt in prompts:
+            if len(prompt) > 0:
+                tokens_pure = clip.tokenize(prompt)
+                tokens_concat = sum(tokens_pure["l"], [])
+                block = [t for t in tokens_concat if t[0] not in special_tokens]
+                blocks.append(block)
 
-            if clip.layer_idx is not None:
-                clip.cond_stage_model.set_clip_options({"layer": clip.layer_idx})
-
-            if return_pooled == "unprojected":
-                clip.cond_stage_model.set_clip_options({"projected_pooled": False})
-
-            clip.load_model()
-
-            clip_skip = -stop_at_clip_layer
-
-            ceil = math.ceil(clip_skip)
-            floor = math.floor(clip_skip)
-            alpha = clip_skip - floor
-
-            clip.clip_layer(-ceil)
-            cond_ceil, pooled_ceil = clip.cond_stage_model.encode_token_weights(tokens)
-
-            clip.clip_layer(-floor)
-            cond_floor, pooled_floor = clip.cond_stage_model.encode_token_weights(tokens)
-
-            cond = cond_ceil * alpha + cond_floor * (1 - alpha)
-
-            if return_pooled:
-                pooled = pooled_ceil * alpha + pooled_floor * (1 - alpha)
-                pooled.conds_list = pooled_floor.conds_list
-                return cond, pooled
-            return cond
-
-        return encode_from_tokens
-
-    def set_last_layer(self, clip, stop_at_clip_layer):
-        # if clip.patcher.model.clip_name == "l":
-        c = clip.clone()
-        c.encode_from_tokens = self.encode_from_tokens_patched(clip, stop_at_clip_layer)
-        return (c,)
+        if len(blocks) > 0:
+            lengths = [str(len(b)) for b in blocks]
+            if debug_print:
+                print(f"Token count: {' + '.join(lengths)}")
+                print("--start--")
+                print(" + ".join(f"'{vocab[t[0]]}'" for b in blocks for t in b))
+                print("--finish--")
+        else:
+            lengths = ["0"]
+        return (lengths,)
