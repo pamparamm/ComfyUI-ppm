@@ -119,6 +119,9 @@ class LatentToMaskBB:
                 "w": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "h": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "value": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+            },
+            "optional": {
+                "outer_value": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01}),
             }
         }
 
@@ -127,7 +130,7 @@ class LatentToMaskBB:
 
     CATEGORY = "mask"
 
-    def get_bounding_box(self, latent, x: float, y: float, w: float, h: float, value: float = 1.0):
+    def get_bounding_box(self, latent, x: float, y: float, w: float, h: float, value: float = 1.0, outer_value: float = 0.0):
         x_end, y_end = x + w, y + h
         if x_end > 1.0 or y_end > 1.0:
             raise ValueError("x + w and y + h must be less than 1.0")
@@ -140,7 +143,7 @@ class LatentToMaskBB:
         x_coord, x_end_coord = round(x * width), round(x_end * width)
         y_coord, y_end_coord = round(y * height), round(y_end * height)
 
-        mask = torch.zeros(height, width)
+        mask = torch.full((height, width), outer_value)
         mask[y_coord:y_end_coord, x_coord:x_end_coord] = value
 
         return (mask.unsqueeze(0),)

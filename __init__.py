@@ -4,6 +4,7 @@ from .cascade_utils import StableCascade_AutoCompLatent
 from .clip_misc import CLIPTextEncodeBREAK, CLIPMicroConditioning, CLIPTokenCounter
 from .clip_negpip import CLIPNegPip
 from .attention_couple_ppm import AttentionCouplePPM
+from .schedulers import hijack_schedulers
 
 WEB_DIRECTORY = "./js"
 
@@ -35,3 +36,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CLIPNegPip": "CLIPNegPip",
     "AttentionCouplePPM": "AttentionCouplePPM",
 }
+
+hijack_schedulers()

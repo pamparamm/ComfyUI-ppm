@@ -25,3 +25,8 @@ A small lightweight wrapper over `ConditioningConcat` node, `CLIPTextEncodeBREAK
 
 ## CLIPTokenCounter
 Counts tokens in your prompt and returns them as a string. You can also print token count + individual tokens by enabling `debug_print`.
+
+# Hooks/Hijacks
+
+## Schedulers
+Adds [AlignYourSteps scheduler modified by Extraltodeus](https://github.com/Extraltodeus/sigmas_tools_and_the_golden_scheduler/blob/0dc89a264ef346a093d053c0da751f3ece317613/sigmas_merge.py#L203-L233) to the default list of schedulers by replacing `comfy.samplers.calculate_sigmas` function. `ays` is the default AYS scheduler and `ays+` is just `ays` with `force_sigma_min=True`.
