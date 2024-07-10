@@ -17,6 +17,14 @@ Modified implementation of AttentionCouple by [laksjdjf](https://github.com/laks
 
 You can use multiple `LatentToMaskBB` nodes to set bounding box masks for `AttentionCouplePPM`. The parameters are relative to your initial latent: `x=0.5, y=0.0, w=0.5, h=1.0` will produce a mask covering right half of your image.
 
+## CFG++SamplerSelect
+Samplers adapted to [CFG++: Manifold-constrained Classifier Free Guidance for Diffusion Models by Chung et al.](https://cfgpp-diffusion.github.io/)
+
+Should greatly reduce overexposure effect. Use together with `SamplerCustom` node. Don't forget to set CFG scale to 1.0-2.0 and PAG scale (if used) to 0.5-1.0.
+
+## Guidance Limiter
+Implementation of [Applying Guidance in a Limited Interval Improves Sample and Distribution Quality in Diffusion Models by Kynkäänniemi et al.](https://arxiv.org/abs/2404.07724) (also contains `RescaleCFG` functionality)
+
 ## Empty Latent Image (Aspect Ratio)
 `Empty Latent Image (Aspect Ratio)` node generates empty latent with specified aspect ratio and with respect to target resolution.
 
@@ -30,3 +38,5 @@ Counts tokens in your prompt and returns them as a string. You can also print to
 
 ## Schedulers
 Adds [AlignYourSteps scheduler modified by Extraltodeus](https://github.com/Extraltodeus/sigmas_tools_and_the_golden_scheduler/blob/0dc89a264ef346a093d053c0da751f3ece317613/sigmas_merge.py#L203-L233) to the default list of schedulers by replacing `comfy.samplers.calculate_sigmas` function. `ays` is the default AYS scheduler and `ays+` is just `ays` with `force_sigma_min=True`.
+
+Also adds GITS scheduler and AYS_30 scheduler (based on [AYS_32 by Koitenshin](https://github.com/AUTOMATIC1111/stable-diffusion-webui/pull/15751#issuecomment-2143648234))

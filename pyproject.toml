@@ -1,0 +1,14 @@
+[project]
+name = "comfyui-ppm"
+description = "Fixed AttentionCouple/NegPip(negative weights in prompts), more CFG++ samplers, etc."
+version = "1.0.0"
+license = "AGPL-3.0"
+
+[project.urls]
+Repository = "https://github.com/pamparamm/ComfyUI-ppm"
+#  Used by Comfy Registry https://comfyregistry.org
+
+[tool.comfy]
+PublisherId = "pamparamm"
+DisplayName = "ComfyUI-ppm"
+Icon = ""

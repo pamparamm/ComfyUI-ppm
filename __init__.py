@@ -4,6 +4,8 @@ from .cascade_utils import StableCascade_AutoCompLatent
 from .clip_misc import CLIPTextEncodeBREAK, CLIPMicroConditioning, CLIPTokenCounter
 from .clip_negpip import CLIPNegPip
 from .attention_couple_ppm import AttentionCouplePPM
+from .guidance_limiter import GuidanceLimiter
+from .samplers import CFGPPSamplerSelect, inject_samplers
 from .schedulers import hijack_schedulers
 
 WEB_DIRECTORY = "./js"
@@ -20,6 +22,8 @@ NODE_CLASS_MAPPINGS = {
     "CLIPTokenCounter": CLIPTokenCounter,
     "CLIPNegPip": CLIPNegPip,
     "AttentionCouplePPM": AttentionCouplePPM,
+    "Guidance Limiter": GuidanceLimiter,
+    "CFGPPSamplerSelect": CFGPPSamplerSelect,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -35,6 +39,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CLIPTokenCounter": "CLIPTokenCounter",
     "CLIPNegPip": "CLIPNegPip",
     "AttentionCouplePPM": "AttentionCouplePPM",
+    "Guidance Limiter": "Guidance Limiter",
+    "CFGPPSamplerSelect": "CFG++SamplerSelect",
 }
 
+inject_samplers()
 hijack_schedulers()
