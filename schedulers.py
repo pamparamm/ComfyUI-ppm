@@ -25,8 +25,7 @@ def _ays_scheduler(model_sampling, steps, force_sigma_min, model_type="SDXL"):
         "SDXL_30": [999, 953, 904, 850, 813, 777, 738, 695, 650, 602, 556, 510, 462, 417, 374, 331, 290, 250, 214, 182, 155, 131, 108, 85, 66, 49, 32, 20, 12, 3, 0],
     }
     indices = timestep_indices[model_type]
-    indices.reverse()
-    sigmas = simple_scheduler(model_sampling, 1000)[indices]
+    sigmas = simple_scheduler(model_sampling, 1000).flip(0)[1:][indices]
     sigmas = loglinear_interp(sigmas.tolist(), steps + 1 if not force_sigma_min else steps)
     sigmas = torch.FloatTensor(sigmas)
     sigmas = torch.cat([sigmas[:-1] if not force_sigma_min else sigmas, torch.FloatTensor([0.0])])
