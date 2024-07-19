@@ -1,16 +1,18 @@
 from comfy.k_diffusion import sampling as k_diffusion_sampling
 from comfy.samplers import KSAMPLER
 from . import ppm_cfgpp_sampling
+from . import ppm_cfgpp_dyn_sampling
 
 INITIALIZED = False
 CFGPP_SAMPLER_NAMES_ORIGINAL = ["euler_cfg_pp", "euler_ancestral_cfg_pp"]
+CFGPP_SAMPLER_NAMES_DYN = ["euler_dy_cfg_pp", "euler_smea_dy_cfg_pp"]
 CFGPP_SAMPLER_NAMES = CFGPP_SAMPLER_NAMES_ORIGINAL + [
     "dpmpp_2m_cfg_pp",
     "dpmpp_2m_sde_cfg_pp",
     "dpmpp_2m_sde_gpu_cfg_pp",
     "dpmpp_3m_sde_cfg_pp",
     "dpmpp_3m_sde_gpu_cfg_pp",
-]
+] + CFGPP_SAMPLER_NAMES_DYN
 
 
 def inject_samplers():
@@ -38,8 +40,10 @@ class CFGPPSamplerSelect:
     def get_sampler(self, sampler_name, eta: float):
         if sampler_name in CFGPP_SAMPLER_NAMES_ORIGINAL:
             sampler_func = getattr(k_diffusion_sampling, "sample_{}".format(sampler_name))
+        elif sampler_name in CFGPP_SAMPLER_NAMES_DYN:
+            sampler_func = getattr(ppm_cfgpp_dyn_sampling, "sample_{}".format(sampler_name))
         else:
             sampler_func = getattr(ppm_cfgpp_sampling, "sample_{}".format(sampler_name))
-        extra_options = {} if sampler_name in {"euler_cfg_pp", "dpmpp_2m_cfg_pp"} else {"eta": eta}
+        extra_options = {} if sampler_name in {"euler_cfg_pp", "dpmpp_2m_cfg_pp", "euler_dy_cfg_pp", "euler_smea_dy_cfg_pp"} else {"eta": eta}
         sampler = KSAMPLER(sampler_func, extra_options=extra_options)
         return (sampler,)
