@@ -6,7 +6,8 @@ I'll add some example workflows soon.
 # Nodes
 
 ## CLIPNegPip
-Modified implementation of NegPiP by [laksjdjf](https://github.com/laksjdjf) and [hako-mikan](https://github.com/hako-mikan). It uses ModelPatcher instead of monkey-patching, which should increase compatibility with other nodes.
+Modified implementation of NegPiP by [laksjdjf](https://github.com/laksjdjf) and [hako-mikan](https://github.com/hako-mikan). It uses ModelPatcher instead of monkey-patching, which should increase compatibility with other nodes. Compatible with weight interpretations from [Advanced CLIP Text Encode extension by BlenderNeko
+](https://github.com/BlenderNeko/ComfyUI_ADV_CLIP_emb).
 
 `CLIPNegPip` node allows you to use negative weights in prompts. You should connect CLIPNegPip before other model/clip patches. After that, you can enter negative weights in your prompts (CTRL + arrows hotkey is capped at 0.0, will probably fix that soon).
 
@@ -40,3 +41,6 @@ Counts tokens in your prompt and returns them as a string. You can also print to
 Adds [AlignYourSteps scheduler modified by Extraltodeus](https://github.com/Extraltodeus/sigmas_tools_and_the_golden_scheduler/blob/0dc89a264ef346a093d053c0da751f3ece317613/sigmas_merge.py#L203-L233) to the default list of schedulers by replacing `comfy.samplers.calculate_sigmas` function. `ays` is the default AYS scheduler and `ays+` is just `ays` with `force_sigma_min=True`.
 
 Also adds GITS scheduler and AYS_30 scheduler (based on [AYS_32 by Koitenshin](https://github.com/AUTOMATIC1111/stable-diffusion-webui/pull/15751#issuecomment-2143648234))
+
+## Advanced CLIP Text Encode
+Hijacks `advanced_encode_from_tokens` method from [Advanced CLIP Text Encode](https://github.com/BlenderNeko/ComfyUI_ADV_CLIP_emb) extension (if installed), making all weight interpretations compatible with NegPip.

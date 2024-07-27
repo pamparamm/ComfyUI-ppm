@@ -2,7 +2,7 @@ from .latent_misc import EmptyLatentImageAR, EmptyLatentImageARAdvanced, LatentT
 from .random_gen import RandomPromptGenerator
 from .cascade_utils import StableCascade_AutoCompLatent
 from .clip_misc import CLIPTextEncodeBREAK, CLIPMicroConditioning, CLIPTokenCounter
-from .clip_negpip import CLIPNegPip
+from .clip_negpip import CLIPNegPip, hijack_adv_encode
 from .attention_couple_ppm import AttentionCouplePPM
 from .guidance_limiter import GuidanceLimiter
 from .samplers import CFGPPSamplerSelect, inject_samplers
@@ -45,3 +45,4 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 
 inject_samplers()
 hijack_schedulers()
+hijack_adv_encode()
