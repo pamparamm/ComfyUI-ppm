@@ -2,7 +2,7 @@
 name = "comfyui-ppm"
 description = "Fixed AttentionCouple/NegPip(negative weights in prompts), more CFG++ samplers, etc."
 version = "1.0.5"
-license = "AGPL-3.0"
+license = { text = "GNU Affero General Public License v3.0" }
 
 [project.urls]
 Repository = "https://github.com/pamparamm/ComfyUI-ppm"
