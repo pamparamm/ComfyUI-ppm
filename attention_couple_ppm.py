@@ -4,7 +4,6 @@
 import torch
 import torch.nn.functional as F
 import math
-import itertools
 import comfy.model_management
 from comfy.model_patcher import ModelPatcher
 
@@ -14,14 +13,29 @@ COND = 0
 UNCOND = 1
 
 
+def get_neighbors(num: float):
+    def f_c(a):
+        return (math.floor(a), math.ceil(a))
+
+    return set([*f_c(num-1), *f_c(num), *f_c(num+1)])
+
+
+# Naive and totally inaccurate way to factorize target_res into rescaled integer width/height
 def rescale_size(width: int, height: int, target_res: int):
     scale = math.sqrt(height * width / target_res)
     height_scaled, width_scaled = height / scale, width / scale
-    height_rounded = math.floor(height_scaled), math.ceil(height_scaled)
-    width_rounded = math.floor(width_scaled), math.ceil(width_scaled)
-    for w, h in itertools.product(height_rounded, width_rounded):
-        if w * h == target_res:
-            return w, h
+    height_rounded = get_neighbors(height_scaled)
+    width_rounded = get_neighbors(width_scaled)
+
+    for w in width_rounded:
+        _h = target_res / w
+        if _h % 1 == 0:
+            return w, int(_h)
+    for h in height_rounded:
+        _w = target_res / h
+        if _w % 1 == 0:
+            return int(_w), h
+
     raise ValueError(f"Can't rescale {width} and {height} to fit {target_res}")
 
 

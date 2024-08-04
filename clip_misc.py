@@ -1,5 +1,3 @@
-import math
-
 from comfy.sd import CLIP
 from nodes import ConditioningConcat, MAX_RESOLUTION
 from node_helpers import conditioning_set_values

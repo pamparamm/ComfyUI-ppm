@@ -4,7 +4,7 @@ from .cascade_utils import StableCascade_AutoCompLatent
 from .clip_misc import CLIPTextEncodeBREAK, CLIPMicroConditioning, CLIPTokenCounter
 from .clip_negpip import CLIPNegPip
 from .attention_couple_ppm import AttentionCouplePPM
-from .guidance_limiter import GuidanceLimiter
+from .guidance_limiter import GuidanceLimiter, CFGLimiterGuider
 from .samplers import CFGPPSamplerSelect, inject_samplers
 from .schedulers import hijack_schedulers
 
@@ -26,6 +26,7 @@ NODE_CLASS_MAPPINGS = {
     "CLIPNegPip": CLIPNegPip,
     "AttentionCouplePPM": AttentionCouplePPM,
     "Guidance Limiter": GuidanceLimiter,
+    "CFGLimiterGuider": CFGLimiterGuider,
     "CFGPPSamplerSelect": CFGPPSamplerSelect,
 }
 
@@ -43,6 +44,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CLIPNegPip": "CLIPNegPip",
     "AttentionCouplePPM": "AttentionCouplePPM",
     "Guidance Limiter": "Guidance Limiter",
+    "CFGLimiterGuider": "CFGLimiterGuider",
     "CFGPPSamplerSelect": "CFG++SamplerSelect",
 }
 

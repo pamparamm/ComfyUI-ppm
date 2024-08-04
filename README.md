@@ -26,6 +26,8 @@ Should greatly reduce overexposure effect. Use together with `SamplerCustom` nod
 ## Guidance Limiter
 Implementation of [Applying Guidance in a Limited Interval Improves Sample and Distribution Quality in Diffusion Models by Kynkäänniemi et al.](https://arxiv.org/abs/2404.07724) (also contains `RescaleCFG` functionality)
 
+Guidance Limiter is also available in a format of guider node `CFGLimiterGuider` for `SamplerCustomAdvanced`.
+
 ## Empty Latent Image (Aspect Ratio)
 `Empty Latent Image (Aspect Ratio)` node generates empty latent with specified aspect ratio and with respect to target resolution.
 
