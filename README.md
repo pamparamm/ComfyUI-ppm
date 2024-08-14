@@ -1,7 +1,7 @@
 # ComfyUI-ppm
-Just a bunch of random nodes modified/fixed/created by me or others. If any node starts throwing errors after an update - try re-adding it.
+Just a bunch of random nodes modified/fixed/created by me or others. If any node starts throwing errors after an update - try to delete and re-add the node.
 
-I'll add some example workflows soon.
+I'll probably add some example workflows in the future (but I'm kinda lazy, kek).
 
 # Nodes
 
@@ -11,22 +11,25 @@ Modified implementation of NegPiP by [laksjdjf](https://github.com/laksjdjf) and
 
 `CLIPNegPip` node allows you to use negative weights in prompts. You should connect CLIPNegPip before other model/clip patches. After that, you can enter negative weights in your prompts (CTRL + arrows hotkey is capped at 0.0, will probably fix that soon).
 
-You can read more about NegPiP [in the original repo](https://github.com/hako-mikan/sd-webui-negpip). I recommend putting everything from negative prompt to positive with a negative weight of something like -1.1 or -1.3. It's also better to keep all commas inside weight braces (i.e. `(worst quality,:-1.3) (sketch:-1.1,)` instead of `(worst quality:-1.3), (sketch:-1.1),`).
+Read more about NegPiP [in the original repo](https://github.com/hako-mikan/sd-webui-negpip). I recommend putting everything from negative prompt to positive with a negative weight of something like -1.1 or -1.3. It's also better to keep all commas inside weight braces (i.e. `(worst quality,:-1.3) (sketch:-1.1,)` instead of `(worst quality:-1.3), (sketch:-1.1),`).
 
 ## AttentionCouplePPM
 Modified implementation of AttentionCouple by [laksjdjf](https://github.com/laksjdjf) and [Haoming02](https://github.com/Haoming02). I made `AttentionCouplePPM` node compatible with `CLIPNegPiP` node and with default `PatchModelAddDownscale (Kohya Deep Shrink)` node. You can add/remove regions by right-clicking the node and selecting `Add Region`/`Remove Region`.
 
-You can use multiple `LatentToMaskBB` nodes to set bounding box masks for `AttentionCouplePPM`. The parameters are relative to your initial latent: `x=0.5, y=0.0, w=0.5, h=1.0` will produce a mask covering right half of your image.
+Use multiple `LatentToMaskBB` nodes to set bounding box masks for `AttentionCouplePPM`. The parameters are relative to your initial latent: `x=0.5, y=0.0, w=0.5, h=1.0` will produce a mask covering right half of your image.
 
 ## CFG++SamplerSelect
-Samplers adapted to [CFG++: Manifold-constrained Classifier Free Guidance for Diffusion Models by Chung et al.](https://cfgpp-diffusion.github.io/)
+Samplers adapted to [CFG++: Manifold-constrained Classifier Free Guidance for Diffusion Models by Chung et al.](https://cfgpp-diffusion.github.io/).
+Includes some samplers from [Euler-Smea-Dyn-Sampler by Koishi-Star](https://github.com/Koishi-Star/Euler-Smea-Dyn-Sampler).
 
-Should greatly reduce overexposure effect. Use together with `SamplerCustom` node. Don't forget to set CFG scale to 1.0-2.0 and PAG scale (if used) to 0.5-1.0.
+Should greatly reduce overexposure effect. Use together with `SamplerCustom` node. Don't forget to set CFG scale to 1.0-2.0 and PAG/SEG scale (if used) to 0.5-1.0.
+
+Tweak `s_dy_pow` parameter while using `*_dy_*` samplers to reduce blur artifacts (value `-1` disables this feature).
 
 ## Guidance Limiter
 Implementation of [Applying Guidance in a Limited Interval Improves Sample and Distribution Quality in Diffusion Models by Kynkäänniemi et al.](https://arxiv.org/abs/2404.07724) (also contains `RescaleCFG` functionality)
 
-Guidance Limiter is also available in a format of guider node `CFGLimiterGuider` for `SamplerCustomAdvanced`.
+Guidance Limiter is also available as a `CFGLimiterGuider` guider node for `SamplerCustomAdvanced`.
 
 ## Empty Latent Image (Aspect Ratio)
 `Empty Latent Image (Aspect Ratio)` node generates empty latent with specified aspect ratio and with respect to target resolution.

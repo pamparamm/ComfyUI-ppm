@@ -5,6 +5,9 @@ import torch
 from comfy.k_diffusion import sampling
 import comfy.model_patcher
 
+CFGPP_SAMPLER_NAMES_DYN = ["euler_dy_cfg_pp", "euler_smea_dy_cfg_pp"]
+CFGPP_SAMPLER_NAMES_DYN_ETA = []
+
 
 class _Rescaler:
     def __init__(self, model, x, mode, **extra_args):
@@ -81,7 +84,7 @@ def dy_sampling_step_cfg_pp(x, model, sigma_next, sigma_hat, **extra_args):
 
 @torch.no_grad()
 def sample_euler_dy_cfg_pp(model, x, sigmas, extra_args=None, callback=None, disable=None, s_churn=0., s_tmin=0.,
-                               s_tmax=float('inf'), s_noise=1., s_gamma=None):
+                               s_tmax=float('inf'), s_noise=1., s_dy_pow=-1):
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
 
@@ -95,8 +98,8 @@ def sample_euler_dy_cfg_pp(model, x, sigmas, extra_args=None, callback=None, dis
 
     for i in trange(len(sigmas) - 1, disable=disable):
         gamma = max(s_churn / (len(sigmas) - 1), 2 ** 0.5 - 1) if s_tmin <= sigmas[i] <= s_tmax else 0.
-        if s_gamma is not None:
-            gamma = s_gamma
+        if s_dy_pow >= 0:
+            gamma = gamma * (1.0 - (i / (len(sigmas) - 2))**s_dy_pow)
         sigma_hat = sigmas[i] * (gamma + 1)
         # print(sigma_hat)
         dt = sigmas[i + 1] - sigma_hat
@@ -137,7 +140,7 @@ def smea_sampling_step_cfg_pp(x, model, sigma_next, sigma_hat, **extra_args):
 
 @torch.no_grad()
 def sample_euler_smea_dy_cfg_pp(model, x, sigmas, extra_args=None, callback=None, disable=None, s_churn=0., s_tmin=0.,
-                               s_tmax=float('inf'), s_noise=1.):
+                               s_tmax=float('inf'), s_noise=1., s_dy_pow=-1):
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
 
@@ -151,6 +154,8 @@ def sample_euler_smea_dy_cfg_pp(model, x, sigmas, extra_args=None, callback=None
 
     for i in trange(len(sigmas) - 1, disable=disable):
         gamma = max(s_churn / (len(sigmas) - 1), 2 ** 0.5 - 1) if s_tmin <= sigmas[i] <= s_tmax else 0.
+        if s_dy_pow >= 0:
+            gamma = gamma * (1.0 - (i / (len(sigmas) - 2))**s_dy_pow)
         sigma_hat = sigmas[i] * (gamma + 1)
         dt = sigmas[i + 1] - sigma_hat
         if gamma > 0:

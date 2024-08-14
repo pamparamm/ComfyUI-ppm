@@ -4,6 +4,21 @@ from tqdm import trange
 import comfy.model_patcher
 from comfy.k_diffusion.sampling import BrownianTreeNoiseSampler
 
+CFGPP_SAMPLER_NAMES_KD = [
+    "dpmpp_2m_cfg_pp",
+    "dpmpp_2m_sde_cfg_pp",
+    "dpmpp_2m_sde_gpu_cfg_pp",
+    "dpmpp_3m_sde_cfg_pp",
+    "dpmpp_3m_sde_gpu_cfg_pp",
+]
+
+CFGPP_SAMPLER_NAMES_KD_ETA = [
+    "dpmpp_2m_sde_cfg_pp",
+    "dpmpp_2m_sde_gpu_cfg_pp",
+    "dpmpp_3m_sde_cfg_pp",
+    "dpmpp_3m_sde_gpu_cfg_pp",
+]
+
 
 @torch.no_grad()
 def sample_dpmpp_2m_cfg_pp(model, x, sigmas, extra_args=None, callback=None, disable=None):
