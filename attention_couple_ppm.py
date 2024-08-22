@@ -17,7 +17,7 @@ def get_neighbors(num: float):
     def f_c(a):
         return (math.floor(a), math.ceil(a))
 
-    return set([*f_c(num-1), *f_c(num), *f_c(num+1)])
+    return set([*f_c(num - 1), *f_c(num), *f_c(num + 1)])
 
 
 # Naive and totally inaccurate way to factorize target_res into rescaled integer width/height
@@ -70,7 +70,11 @@ class AttentionCouplePPM:
             "required": {
                 "model": ("MODEL",),
                 "base_mask": ("MASK",),
-            }
+            },
+            "optional": {
+                "cond_1": ("CONDITIONING",),
+                "mask_1": ("MASK",),
+            },
         }
 
     RETURN_TYPES = ("MODEL",)
