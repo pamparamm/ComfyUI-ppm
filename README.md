@@ -14,7 +14,9 @@ Modified implementation of NegPiP by [laksjdjf](https://github.com/laksjdjf) and
 Read more about NegPiP [in the original repo](https://github.com/hako-mikan/sd-webui-negpip). I recommend putting everything from negative prompt to positive with a negative weight of something like -1.1 or -1.3. It's also better to keep all commas inside weight braces (i.e. `(worst quality,:-1.3) (sketch:-1.1,)` instead of `(worst quality:-1.3), (sketch:-1.1),`).
 
 ## AttentionCouplePPM
-Modified implementation of AttentionCouple by [laksjdjf](https://github.com/laksjdjf) and [Haoming02](https://github.com/Haoming02). I made `AttentionCouplePPM` node compatible with `CLIPNegPiP` node and with default `PatchModelAddDownscale (Kohya Deep Shrink)` node. You can add/remove regions by right-clicking the node and selecting `Add Region`/`Remove Region`.
+Modified implementation of AttentionCouple by [laksjdjf](https://github.com/laksjdjf) and [Haoming02](https://github.com/Haoming02). I made `AttentionCouplePPM` node compatible with `CLIPNegPiP` node and with default `PatchModelAddDownscale (Kohya Deep Shrink)` node.
+
+Inputs for new regions are managed automatically: when you attach cond/mask of a region to the node, a new `cond_` / `mask_` input appears. Last `cond_` / `mask_` inputs are always optional.
 
 Use multiple `LatentToMaskBB` nodes to set bounding box masks for `AttentionCouplePPM`. The parameters are relative to your initial latent: `x=0.5, y=0.0, w=0.5, h=1.0` will produce a mask covering right half of your image.
 
