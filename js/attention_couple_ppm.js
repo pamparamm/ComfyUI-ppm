@@ -33,6 +33,34 @@ app.registerExtension({
                 return r;
 
             }
+
+            const onConnectionsChange = nodeType.prototype.onConnectionsChange;
+			nodeType.prototype.onConnectionsChange = function (type, index, connected, link_info) {
+                let cond_input_name = "cond_";
+                let mask_input_name = "mask_";
+                let slot_i = 1;
+
+                // Count existing input slots
+                for (let i = 0; i < this.inputs.length; i++) {
+                    let input_i = this.inputs[i];
+                    if (input_i.name.startsWith(mask_input_name)) {
+                        slot_i++;
+                    }
+                }
+
+                let last_slot = this.inputs[this.inputs.length - 1];
+                let second_last_slot = this.inputs[this.inputs.length - 2];
+
+                // Check if the last two slots are connected
+                if (
+                    (second_last_slot.link != undefined)
+                    && (last_slot.link != undefined)
+                ) {
+                    // Add new 'cond' and 'mask' slots
+                    this.addInput(`${cond_input_name}${slot_i}`, "CONDITIONING");
+                    this.addInput(`${mask_input_name}${slot_i}`, "MASK");
+                }
+            }
         }
     },
 });
