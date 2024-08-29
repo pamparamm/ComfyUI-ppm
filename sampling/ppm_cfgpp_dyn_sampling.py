@@ -2,36 +2,12 @@
 from tqdm.auto import trange
 import torch
 
-from comfy.k_diffusion import sampling
+from .ppm_dyn_sampling import Rescaler
+from comfy.k_diffusion.sampling import to_d
 import comfy.model_patcher
 
 CFGPP_SAMPLER_NAMES_DYN = ["euler_dy_cfg_pp", "euler_smea_dy_cfg_pp"]
 CFGPP_SAMPLER_NAMES_DYN_ETA = []
-
-
-class _Rescaler:
-    def __init__(self, model, x, mode, **extra_args):
-        self.model = model
-        self.x = x
-        self.mode = mode
-        self.extra_args = extra_args
-
-        self.latent_image, self.noise = model.latent_image, model.noise
-        self.denoise_mask = self.extra_args.get("denoise_mask", None)
-
-    def __enter__(self):
-        if self.latent_image is not None:
-            self.model.latent_image = torch.nn.functional.interpolate(input=self.latent_image, size=self.x.shape[2:4], mode=self.mode)
-        if self.noise is not None:
-            self.model.noise = torch.nn.functional.interpolate(input=self.latent_image, size=self.x.shape[2:4], mode=self.mode)
-        if self.denoise_mask is not None:
-            self.extra_args["denoise_mask"] = torch.nn.functional.interpolate(input=self.denoise_mask, size=self.x.shape[2:4], mode=self.mode)
-
-        return self
-
-    def __exit__(self, type, value, traceback):
-        del self.model.latent_image, self.model.noise
-        self.model.latent_image, self.model.noise = self.latent_image, self.noise
 
 
 @torch.no_grad()
@@ -59,9 +35,9 @@ def dy_sampling_step_cfg_pp(x, model, sigma_next, sigma_hat, **extra_args):
     a_list = x.unfold(2, 2, 2).unfold(3, 2, 2).contiguous().view(batch_size, channels, m * n, 2, 2)
     c = a_list[:, :, :, 1, 1].view(batch_size, channels, m, n)
 
-    with _Rescaler(model, c, 'nearest-exact', **extra_args) as rescaler:
+    with Rescaler(model, c, 'nearest-exact', **extra_args) as rescaler:
         denoised = model(c, sigma_hat * c.new_ones([c.shape[0]]), **rescaler.extra_args)
-    d = sampling.to_d(c, sigma_hat, temp[0])
+    d = to_d(c, sigma_hat, temp[0])
     c = denoised + d * sigma_next
 
     d_list = c.view(batch_size, channels, m * n, 1, 1)
@@ -107,7 +83,7 @@ def sample_euler_dy_cfg_pp(model, x, sigmas, extra_args=None, callback=None, dis
             eps = torch.randn_like(x) * s_noise
             x = x - eps * (sigma_hat ** 2 - sigmas[i] ** 2) ** 0.5
         denoised = model(x, sigma_hat * s_in, **extra_args)
-        d = sampling.to_d(x, sigma_hat, temp[0])
+        d = to_d(x, sigma_hat, temp[0])
         # Euler method
         x = denoised + d * sigmas[i + 1]
         if sigmas[i + 1] > 0:
@@ -130,9 +106,9 @@ def smea_sampling_step_cfg_pp(x, model, sigma_next, sigma_hat, **extra_args):
 
     m, n = x.shape[2], x.shape[3]
     x = torch.nn.functional.interpolate(input=x, scale_factor=(1.25, 1.25), mode='nearest-exact')
-    with _Rescaler(model, x, 'nearest-exact', **extra_args) as rescaler:
+    with Rescaler(model, x, 'nearest-exact', **extra_args) as rescaler:
         denoised = model(x, sigma_hat * x.new_ones([x.shape[0]]), **rescaler.extra_args)
-    d = sampling.to_d(x, sigma_hat, temp[0])
+    d = to_d(x, sigma_hat, temp[0])
     x = denoised + d * sigma_next
     x = torch.nn.functional.interpolate(input=x, size=(m,n), mode='nearest-exact')
     return x
@@ -162,7 +138,7 @@ def sample_euler_smea_dy_cfg_pp(model, x, sigmas, extra_args=None, callback=None
             eps = torch.randn_like(x) * s_noise
             x = x - eps * (sigma_hat ** 2 - sigmas[i] ** 2) ** 0.5
         denoised = model(x, sigma_hat * s_in, **extra_args)
-        d = sampling.to_d(x, sigma_hat, temp[0])
+        d = to_d(x, sigma_hat, temp[0])
         # Euler method
         x = denoised + d * sigmas[i + 1]
         if sigmas[i + 1] > 0:

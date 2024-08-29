@@ -5,7 +5,7 @@ from .clip_misc import CLIPTextEncodeBREAK, CLIPMicroConditioning, CLIPTokenCoun
 from .clip_negpip import CLIPNegPip
 from .attention_couple_ppm import AttentionCouplePPM
 from .guidance_limiter import GuidanceLimiter, CFGLimiterGuider
-from .samplers import CFGPPSamplerSelect, inject_samplers
+from .samplers import CFGPPSamplerSelect, DynSamplerSelect
 from .schedulers import hijack_schedulers
 
 from .compat.advanced_encode import hijack_adv_encode
@@ -28,6 +28,7 @@ NODE_CLASS_MAPPINGS = {
     "Guidance Limiter": GuidanceLimiter,
     "CFGLimiterGuider": CFGLimiterGuider,
     "CFGPPSamplerSelect": CFGPPSamplerSelect,
+    "DynSamplerSelect": DynSamplerSelect,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -46,10 +47,10 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Guidance Limiter": "Guidance Limiter",
     "CFGLimiterGuider": "CFGLimiterGuider",
     "CFGPPSamplerSelect": "CFG++SamplerSelect",
+    "DynSamplerSelect": "DynSamplerSelect",
 }
 
 
-inject_samplers()
 hijack_schedulers()
 
 hijack_adv_encode()

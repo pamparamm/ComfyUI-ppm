@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-ppm"
 description = "Fixed AttentionCouple/NegPip(negative weights in prompts), more CFG++ samplers, etc."
-version = "1.0.8"
+version = "1.0.9"
 license = { text = "GNU Affero General Public License v3" }
 
 [project.urls]

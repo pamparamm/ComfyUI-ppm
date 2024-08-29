@@ -2,7 +2,7 @@ import torch
 from tqdm import trange
 
 import comfy.model_patcher
-from comfy.k_diffusion.sampling import BrownianTreeNoiseSampler
+from comfy.k_diffusion.sampling import BrownianTreeNoiseSampler, default_noise_sampler, get_ancestral_step, to_d
 
 CFGPP_SAMPLER_NAMES_KD = [
     "dpmpp_2m_cfg_pp",
@@ -10,6 +10,7 @@ CFGPP_SAMPLER_NAMES_KD = [
     "dpmpp_2m_sde_gpu_cfg_pp",
     "dpmpp_3m_sde_cfg_pp",
     "dpmpp_3m_sde_gpu_cfg_pp",
+    "dpmpp_2s_ancestral_cfg_pp",
 ]
 
 CFGPP_SAMPLER_NAMES_KD_ETA = [
@@ -17,6 +18,7 @@ CFGPP_SAMPLER_NAMES_KD_ETA = [
     "dpmpp_2m_sde_gpu_cfg_pp",
     "dpmpp_3m_sde_cfg_pp",
     "dpmpp_3m_sde_gpu_cfg_pp",
+    "dpmpp_2s_ancestral_cfg_pp",
 ]
 
 
@@ -191,3 +193,45 @@ def sample_dpmpp_2m_sde_gpu_cfg_pp(model, x, sigmas, extra_args=None, callback=N
     sigma_min, sigma_max = sigmas[sigmas > 0].min(), sigmas.max()
     noise_sampler = BrownianTreeNoiseSampler(x, sigma_min, sigma_max, seed=extra_args.get("seed", None), cpu=False) if noise_sampler is None else noise_sampler
     return sample_dpmpp_2m_sde_cfg_pp(model, x, sigmas, extra_args=extra_args, callback=callback, disable=disable, eta=eta, s_noise=s_noise, noise_sampler=noise_sampler, solver_type=solver_type)
+
+
+@torch.no_grad()
+def sample_dpmpp_2s_ancestral_cfg_pp(model, x, sigmas, extra_args=None, callback=None, disable=None, eta=1., s_noise=1., noise_sampler=None):
+    """Ancestral sampling with DPM-Solver++(2S) second-order steps."""
+    extra_args = {} if extra_args is None else extra_args
+    noise_sampler = default_noise_sampler(x) if noise_sampler is None else noise_sampler
+    s_in = x.new_ones([x.shape[0]])
+    sigma_fn = lambda t: t.neg().exp()
+    t_fn = lambda sigma: sigma.log().neg()
+
+    temp = [0]
+    def post_cfg_function(args):
+        temp[0] = args["uncond_denoised"]
+        return args["denoised"]
+
+    model_options = extra_args.get("model_options", {}).copy()
+    extra_args["model_options"] = comfy.model_patcher.set_model_options_post_cfg_function(model_options, post_cfg_function, disable_cfg1_optimization=True)
+
+    for i in trange(len(sigmas) - 1, disable=disable):
+        denoised = model(x, sigmas[i] * s_in, **extra_args)
+        sigma_down, sigma_up = get_ancestral_step(sigmas[i], sigmas[i + 1], eta=eta)
+        if callback is not None:
+            callback({'x': x, 'i': i, 'sigma': sigmas[i], 'sigma_hat': sigmas[i], 'denoised': denoised})
+        if sigma_down == 0:
+            # Euler method
+            d = to_d(x, sigmas[i], temp[0])
+            dt = sigma_down - sigmas[i]
+            x = denoised + d * sigma_down
+        else:
+            # DPM-Solver++(2S)
+            t, t_next = t_fn(sigmas[i]), t_fn(sigma_down)
+            r = 1 / 2
+            h = t_next - t
+            s = t + r * h
+            x_2 = (sigma_fn(s) / sigma_fn(t)) * (x + (denoised - temp[0])) - (-h * r).expm1() * denoised
+            denoised_2 = model(x_2, sigma_fn(s) * s_in, **extra_args)
+            x = (sigma_fn(t_next) / sigma_fn(t)) * (x + (denoised - temp[0])) - (-h).expm1() * denoised_2
+        # Noise addition
+        if sigmas[i + 1] > 0:
+            x = x + noise_sampler(sigmas[i], sigmas[i + 1]) * s_noise * sigma_up
+    return x
