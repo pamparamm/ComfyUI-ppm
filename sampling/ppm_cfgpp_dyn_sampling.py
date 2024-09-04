@@ -11,7 +11,7 @@ CFGPP_SAMPLER_NAMES_DYN_ETA = []
 
 
 @torch.no_grad()
-def dy_sampling_step_cfg_pp(x, model, sigma_next, sigma_hat, **extra_args):
+def dy_sampling_step_cfg_pp(x, model, sigma_next, i, sigma, sigma_hat, callback, **extra_args):
     temp = [0]
     def post_cfg_function(args):
         temp[0] = args["uncond_denoised"]
@@ -37,6 +37,9 @@ def dy_sampling_step_cfg_pp(x, model, sigma_next, sigma_hat, **extra_args):
 
     with Rescaler(model, c, 'nearest-exact', **extra_args) as rescaler:
         denoised = model(c, sigma_hat * c.new_ones([c.shape[0]]), **rescaler.extra_args)
+    if callback is not None:
+        callback({"x": c, "i": i, "sigma": sigma, "sigma_hat": sigma_hat, "denoised": denoised})
+
     d = to_d(c, sigma_hat, temp[0])
     c = denoised + d * sigma_next
 
@@ -83,19 +86,19 @@ def sample_euler_dy_cfg_pp(model, x, sigmas, extra_args=None, callback=None, dis
             eps = torch.randn_like(x) * s_noise
             x = x - eps * (sigma_hat ** 2 - sigmas[i] ** 2) ** 0.5
         denoised = model(x, sigma_hat * s_in, **extra_args)
+        if callback is not None:
+            callback({'x': x, 'i': i, 'sigma': sigmas[i], 'sigma_hat': sigma_hat, 'denoised': denoised})
         d = to_d(x, sigma_hat, temp[0])
         # Euler method
         x = denoised + d * sigmas[i + 1]
         if sigmas[i + 1] > 0:
             if i // 2 == 1:
-                x = dy_sampling_step_cfg_pp(x, model, sigmas[i + 1], sigma_hat, **extra_args)
-        if callback is not None:
-            callback({'x': x, 'i': i, 'sigma': sigmas[i], 'sigma_hat': sigma_hat, 'denoised': denoised})
+                x = dy_sampling_step_cfg_pp(x, model, sigmas[i + 1], i, sigmas[i], sigma_hat, callback, **extra_args)
     return x
 
 
 @torch.no_grad()
-def smea_sampling_step_cfg_pp(x, model, sigma_next, sigma_hat, **extra_args):
+def smea_sampling_step_cfg_pp(x, model, sigma_next, i, sigma, sigma_hat, callback, **extra_args):
     temp = [0]
     def post_cfg_function(args):
         temp[0] = args["uncond_denoised"]
@@ -106,8 +109,12 @@ def smea_sampling_step_cfg_pp(x, model, sigma_next, sigma_hat, **extra_args):
 
     m, n = x.shape[2], x.shape[3]
     x = torch.nn.functional.interpolate(input=x, scale_factor=(1.25, 1.25), mode='nearest-exact')
+
     with Rescaler(model, x, 'nearest-exact', **extra_args) as rescaler:
         denoised = model(x, sigma_hat * x.new_ones([x.shape[0]]), **rescaler.extra_args)
+    if callback is not None:
+        callback({"x": x, "i": i, "sigma": sigma, "sigma_hat": sigma_hat, "denoised": denoised})
+
     d = to_d(x, sigma_hat, temp[0])
     x = denoised + d * sigma_next
     x = torch.nn.functional.interpolate(input=x, size=(m,n), mode='nearest-exact')
@@ -138,14 +145,14 @@ def sample_euler_smea_dy_cfg_pp(model, x, sigmas, extra_args=None, callback=None
             eps = torch.randn_like(x) * s_noise
             x = x - eps * (sigma_hat ** 2 - sigmas[i] ** 2) ** 0.5
         denoised = model(x, sigma_hat * s_in, **extra_args)
+        if callback is not None:
+            callback({'x': x, 'i': i, 'sigma': sigmas[i], 'sigma_hat': sigma_hat, 'denoised': denoised})
         d = to_d(x, sigma_hat, temp[0])
         # Euler method
         x = denoised + d * sigmas[i + 1]
         if sigmas[i + 1] > 0:
             if i + 1 // 2 == 1:
-                x = dy_sampling_step_cfg_pp(x, model, sigmas[i + 1], sigma_hat, **extra_args)
+                x = dy_sampling_step_cfg_pp(x, model, sigmas[i + 1], i, sigmas[i], sigma_hat, callback, **extra_args)
             if i + 1 // 2 == 0:
-                x = smea_sampling_step_cfg_pp(x, model, sigmas[i + 1], sigma_hat, **extra_args)
-        if callback is not None:
-            callback({'x': x, 'i': i, 'sigma': sigmas[i], 'sigma_hat': sigma_hat, 'denoised': denoised})
+                x = smea_sampling_step_cfg_pp(x, model, sigmas[i + 1], i, sigmas[i], sigma_hat, callback, **extra_args)
     return x
