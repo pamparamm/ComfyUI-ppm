@@ -1,11 +1,14 @@
 from comfy.k_diffusion import sampling as k_diffusion_sampling
 from comfy.samplers import KSAMPLER
-from .sampling import ppm_dyn_sampling
-from .sampling import ppm_cfgpp_sampling
-from .sampling import ppm_cfgpp_dyn_sampling
+from ..sampling import ppm_dyn_sampling, ppm_cfgpp_sampling, ppm_cfgpp_dyn_sampling
 
-CFGPP_SAMPLER_NAMES_ORIGINAL = ["euler_cfg_pp", "euler_ancestral_cfg_pp"]
-CFGPP_SAMPLER_NAMES_ORIGINAL_ETA = ["euler_ancestral_cfg_pp"]
+CFGPP_SAMPLER_NAMES_ORIGINAL_ETA = [
+    "euler_ancestral_cfg_pp",
+]
+CFGPP_SAMPLER_NAMES_ORIGINAL = [
+    "euler_cfg_pp",
+    *CFGPP_SAMPLER_NAMES_ORIGINAL_ETA,
+]
 
 
 CFGPP_SAMPLER_NAMES = [
@@ -13,10 +16,11 @@ CFGPP_SAMPLER_NAMES = [
     *ppm_cfgpp_sampling.CFGPP_SAMPLER_NAMES_KD,
     *ppm_cfgpp_dyn_sampling.CFGPP_SAMPLER_NAMES_DYN,
 ]
-CFGPP_SAMPLER_NAMES_ETA = [
+SAMPLER_NAMES_ETA = [
     *CFGPP_SAMPLER_NAMES_ORIGINAL_ETA,
     *ppm_cfgpp_sampling.CFGPP_SAMPLER_NAMES_KD_ETA,
     *ppm_cfgpp_dyn_sampling.CFGPP_SAMPLER_NAMES_DYN_ETA,
+    *ppm_dyn_sampling.SAMPLER_NAMES_DYN_ETA,
 ]
 
 
@@ -26,7 +30,8 @@ class DynSamplerSelect:
         return {
             "required": {
                 "sampler_name": (ppm_dyn_sampling.SAMPLER_NAMES_DYN,),
-                "s_dy_pow": ("INT", {"default": -1, "min": -1, "max": 100}),
+                "s_dy_pow": ("INT", {"default": 2, "min": -1, "max": 100}),
+                "s_extra_steps": ("BOOLEAN", {"default": False}),
             }
         }
 
@@ -35,10 +40,11 @@ class DynSamplerSelect:
 
     FUNCTION = "get_sampler"
 
-    def get_sampler(self, sampler_name, s_dy_pow: int):
+    def get_sampler(self, sampler_name, s_dy_pow=-1, s_extra_steps=False):
         sampler_func = getattr(ppm_dyn_sampling, "sample_{}".format(sampler_name))
         extra_options = {}
         extra_options["s_dy_pow"] = s_dy_pow
+        extra_options["s_extra_steps"] = s_extra_steps
         sampler = KSAMPLER(sampler_func, extra_options=extra_options)
         return (sampler,)
 
@@ -51,7 +57,8 @@ class CFGPPSamplerSelect:
             "required": {
                 "sampler_name": (CFGPP_SAMPLER_NAMES,),
                 "eta": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step": 0.01, "round": False}),
-                "s_dy_pow": ("INT", {"default": -1, "min": -1, "max": 100}),
+                "s_dy_pow": ("INT", {"default": 2, "min": -1, "max": 100}),
+                "s_extra_steps": ("BOOLEAN", {"default": False}),
             }
         }
 
@@ -60,13 +67,14 @@ class CFGPPSamplerSelect:
 
     FUNCTION = "get_sampler"
 
-    def get_sampler(self, sampler_name: str, eta: float, s_dy_pow: int):
+    def get_sampler(self, sampler_name: str, eta=1.0, s_dy_pow=-1, s_extra_steps=False):
         sampler_func = self._get_sampler_func(sampler_name)
         extra_options = {}
-        if sampler_name in CFGPP_SAMPLER_NAMES_ETA:
+        if sampler_name in SAMPLER_NAMES_ETA:
             extra_options["eta"] = eta
         if sampler_name in ppm_cfgpp_dyn_sampling.CFGPP_SAMPLER_NAMES_DYN:
             extra_options["s_dy_pow"] = s_dy_pow
+            extra_options["s_extra_steps"] = s_extra_steps
         sampler = KSAMPLER(sampler_func, extra_options=extra_options)
         return (sampler,)
 

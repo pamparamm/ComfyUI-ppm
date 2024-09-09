@@ -4,8 +4,7 @@ from tqdm import trange
 import comfy.model_patcher
 from comfy.k_diffusion.sampling import BrownianTreeNoiseSampler, default_noise_sampler, get_ancestral_step, to_d
 
-CFGPP_SAMPLER_NAMES_KD = [
-    "dpmpp_2m_cfg_pp",
+CFGPP_SAMPLER_NAMES_KD_ETA = [
     "dpmpp_2m_sde_cfg_pp",
     "dpmpp_2m_sde_gpu_cfg_pp",
     "dpmpp_3m_sde_cfg_pp",
@@ -13,12 +12,9 @@ CFGPP_SAMPLER_NAMES_KD = [
     "dpmpp_2s_ancestral_cfg_pp",
 ]
 
-CFGPP_SAMPLER_NAMES_KD_ETA = [
-    "dpmpp_2m_sde_cfg_pp",
-    "dpmpp_2m_sde_gpu_cfg_pp",
-    "dpmpp_3m_sde_cfg_pp",
-    "dpmpp_3m_sde_gpu_cfg_pp",
-    "dpmpp_2s_ancestral_cfg_pp",
+CFGPP_SAMPLER_NAMES_KD = [
+    "dpmpp_2m_cfg_pp",
+    *CFGPP_SAMPLER_NAMES_KD_ETA,
 ]
 
 
