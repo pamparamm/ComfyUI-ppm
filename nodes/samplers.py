@@ -7,6 +7,7 @@ CFGPP_SAMPLER_NAMES_ORIGINAL_ETA = [
 ]
 CFGPP_SAMPLER_NAMES_ORIGINAL = [
     "euler_cfg_pp",
+    "dpmpp_2m_cfg_pp",
     *CFGPP_SAMPLER_NAMES_ORIGINAL_ETA,
 ]
 
@@ -30,6 +31,7 @@ class DynSamplerSelect:
         return {
             "required": {
                 "sampler_name": (ppm_dyn_sampling.SAMPLER_NAMES_DYN,),
+                "eta": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step": 0.01, "round": False}),
                 "s_dy_pow": ("INT", {"default": 2, "min": -1, "max": 100}),
                 "s_extra_steps": ("BOOLEAN", {"default": False}),
             }
@@ -40,9 +42,11 @@ class DynSamplerSelect:
 
     FUNCTION = "get_sampler"
 
-    def get_sampler(self, sampler_name, s_dy_pow=-1, s_extra_steps=False):
+    def get_sampler(self, sampler_name, eta=1.0, s_dy_pow=-1, s_extra_steps=False):
         sampler_func = getattr(ppm_dyn_sampling, "sample_{}".format(sampler_name))
         extra_options = {}
+        if sampler_name in SAMPLER_NAMES_ETA:
+            extra_options["eta"] = eta
         extra_options["s_dy_pow"] = s_dy_pow
         extra_options["s_extra_steps"] = s_extra_steps
         sampler = KSAMPLER(sampler_func, extra_options=extra_options)

@@ -2,12 +2,15 @@
 from tqdm.auto import trange
 import torch
 
-from comfy.k_diffusion.sampling import to_d, default_noise_sampler, get_ancestral_step
+from comfy.k_diffusion.sampling import to_d, default_noise_sampler, get_ancestral_step, BrownianTreeNoiseSampler
 
-SAMPLER_NAMES_DYN_ETA = ["euler_ancestral_dy"]
+SAMPLER_NAMES_DYN_ETA = [
+    "euler_ancestral_dy",
+]
 SAMPLER_NAMES_DYN = [
     "euler_dy",
     "euler_smea_dy",
+    "dpmpp_2m_dy",
     *SAMPLER_NAMES_DYN_ETA,
 ]
 
@@ -215,3 +218,103 @@ def sample_euler_ancestral_dy(
         if sigmas[i + 1] > 0:
             x = x + noise_sampler(sigma_hat, sigmas[i + 1]) * s_noise * sigma_up
     return x
+
+
+@torch.no_grad()
+def sample_dpmpp_2m_sde_dy(
+    model,
+    x,
+    sigmas,
+    extra_args=None,
+    callback=None,
+    disable=None,
+    eta=1.0,
+    s_noise=1.0,
+    noise_sampler=None,
+    solver_type="midpoint",
+    s_dy_pow=-1,
+    s_extra_steps=True,
+):
+    """DPM-Solver++(2M) SDE."""
+    if len(sigmas) <= 1:
+        return x
+
+    if solver_type not in {"heun", "midpoint"}:
+        raise ValueError("solver_type must be 'heun' or 'midpoint'")
+
+    seed = extra_args.get("seed", None)
+    sigma_min, sigma_max = sigmas[sigmas > 0].min(), sigmas.max()
+    noise_sampler = BrownianTreeNoiseSampler(x, sigma_min, sigma_max, seed=seed, cpu=True) if noise_sampler is None else noise_sampler
+    extra_args = {} if extra_args is None else extra_args
+    s_in = x.new_ones([x.shape[0]])
+
+    old_denoised = None
+    h_last = None
+    h = None
+
+    for i in trange(len(sigmas) - 1, disable=disable):
+        gamma = 2**0.5 - 1
+        if s_dy_pow >= 0:
+            gamma = gamma * (1.0 - (i / (len(sigmas) - 2)) ** s_dy_pow)
+        sigma_hat = sigmas[i] * (gamma + 1)
+        if gamma > 0:
+            eps = torch.randn_like(x) * s_noise
+            x = x - eps * (sigma_hat**2 - sigmas[i] ** 2) ** 0.5
+        denoised = model(x, sigma_hat * s_in, **extra_args)
+        if callback is not None:
+            callback({"x": x, "i": i, "sigma": sigmas[i], "sigma_hat": sigma_hat, "denoised": denoised})
+        if sigmas[i + 1] == 0:
+            # Denoising step
+            x = denoised
+        else:
+            # DPM-Solver++(2M) SDE
+            t, s = -sigma_hat.log(), -sigmas[i + 1].log()
+            h = s - t
+            eta_h = eta * h
+
+            x = sigmas[i + 1] / sigma_hat * (-eta_h).exp() * x + (-h - eta_h).expm1().neg() * denoised
+
+            if old_denoised is not None:
+                r = h_last / h
+                if solver_type == "heun":
+                    x = x + ((-h - eta_h).expm1().neg() / (-h - eta_h) + 1) * (1 / r) * (denoised - old_denoised)
+                elif solver_type == "midpoint":
+                    x = x + 0.5 * (-h - eta_h).expm1().neg() * (1 / r) * (denoised - old_denoised)
+
+            # TODO not working properly
+            if eta:
+                x = x + noise_sampler(sigmas[i], sigmas[i + 1]) * sigmas[i + 1] * (-2 * eta_h).expm1().neg().sqrt() * s_noise
+
+        old_denoised = denoised
+        h_last = h
+    return x
+
+
+@torch.no_grad()
+def sample_dpmpp_2m_dy(
+    model,
+    x,
+    sigmas,
+    extra_args=None,
+    callback=None,
+    disable=None,
+    s_noise=1.0,
+    noise_sampler=None,
+    solver_type="midpoint",
+    s_dy_pow=-1,
+    s_extra_steps=True,
+):
+    return sample_dpmpp_2m_sde_dy(
+        model,
+        x,
+        sigmas,
+        extra_args,
+        callback,
+        disable,
+        0.0,
+        s_noise,
+        noise_sampler,
+        solver_type,
+        s_dy_pow,
+        s_extra_steps,
+    )
