@@ -11,6 +11,7 @@ SAMPLER_NAMES_DYN = [
     "euler_dy",
     "euler_smea_dy",
     "dpmpp_2m_dy",
+    "dpmpp_3m_dy",
     *SAMPLER_NAMES_DYN_ETA,
 ]
 
@@ -291,6 +292,80 @@ def sample_dpmpp_2m_sde_dy(
 
 
 @torch.no_grad()
+def sample_dpmpp_3m_sde_dy(
+    model,
+    x,
+    sigmas,
+    extra_args=None,
+    callback=None,
+    disable=None,
+    eta=1.0,
+    s_noise=1.0,
+    noise_sampler=None,
+    s_dy_pow=-1,
+    s_extra_steps=True,
+):
+    """DPM-Solver++(3M) SDE."""
+
+    if len(sigmas) <= 1:
+        return x
+
+    seed = extra_args.get("seed", None)
+    sigma_min, sigma_max = sigmas[sigmas > 0].min(), sigmas.max()
+    noise_sampler = BrownianTreeNoiseSampler(x, sigma_min, sigma_max, seed=seed, cpu=True) if noise_sampler is None else noise_sampler
+    extra_args = {} if extra_args is None else extra_args
+    s_in = x.new_ones([x.shape[0]])
+
+    denoised_1, denoised_2 = None, None
+    h, h_1, h_2 = None, None, None
+
+    for i in trange(len(sigmas) - 1, disable=disable):
+        gamma = 2**0.5 - 1
+        if s_dy_pow >= 0:
+            gamma = gamma * (1.0 - (i / (len(sigmas) - 2)) ** s_dy_pow)
+        sigma_hat = sigmas[i] * (gamma + 1)
+        if gamma > 0:
+            eps = torch.randn_like(x) * s_noise
+            x = x - eps * (sigma_hat**2 - sigmas[i] ** 2) ** 0.5
+        denoised = model(x, sigma_hat * s_in, **extra_args)
+        if callback is not None:
+            callback({"x": x, "i": i, "sigma": sigmas[i], "sigma_hat": sigma_hat, "denoised": denoised})
+        if sigmas[i + 1] == 0:
+            # Denoising step
+            x = denoised
+        else:
+            t, s = -sigma_hat.log(), -sigmas[i + 1].log()
+            h = s - t
+            h_eta = h * (eta + 1)
+
+            x = torch.exp(-h_eta) * x + (-h_eta).expm1().neg() * denoised
+
+            if h_2 is not None:
+                r0 = h_1 / h
+                r1 = h_2 / h
+                d1_0 = (denoised - denoised_1) / r0
+                d1_1 = (denoised_1 - denoised_2) / r1
+                d1 = d1_0 + (d1_0 - d1_1) * r0 / (r0 + r1)
+                d2 = (d1_0 - d1_1) / (r0 + r1)
+                phi_2 = h_eta.neg().expm1() / h_eta + 1
+                phi_3 = phi_2 / h_eta - 0.5
+                x = x + phi_2 * d1 - phi_3 * d2
+            elif h_1 is not None:
+                r = h_1 / h
+                d = (denoised - denoised_1) / r
+                phi_2 = h_eta.neg().expm1() / h_eta + 1
+                x = x + phi_2 * d
+
+            # TODO not working properly
+            if eta:
+                x = x + noise_sampler(sigmas[i], sigmas[i + 1]) * sigmas[i + 1] * (-2 * h * eta).expm1().neg().sqrt() * s_noise
+
+        denoised_1, denoised_2 = denoised, denoised_1
+        h_1, h_2 = h, h_1
+    return x
+
+
+@torch.no_grad()
 def sample_dpmpp_2m_dy(
     model,
     x,
@@ -315,6 +390,34 @@ def sample_dpmpp_2m_dy(
         s_noise,
         noise_sampler,
         solver_type,
+        s_dy_pow,
+        s_extra_steps,
+    )
+
+
+@torch.no_grad()
+def sample_dpmpp_3m_dy(
+    model,
+    x,
+    sigmas,
+    extra_args=None,
+    callback=None,
+    disable=None,
+    s_noise=1.0,
+    noise_sampler=None,
+    s_dy_pow=-1,
+    s_extra_steps=True,
+):
+    return sample_dpmpp_3m_sde_dy(
+        model,
+        x,
+        sigmas,
+        extra_args,
+        callback,
+        disable,
+        0.0,
+        s_noise,
+        noise_sampler,
         s_dy_pow,
         s_extra_steps,
     )
