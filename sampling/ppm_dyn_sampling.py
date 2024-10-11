@@ -217,7 +217,52 @@ def sample_euler_ancestral_dy(
         dt = sigma_down - sigma_hat
         x = x + d * dt
         if sigmas[i + 1] > 0:
-            x = x + noise_sampler(sigma_hat, sigmas[i + 1]) * s_noise * sigma_up
+            x = x + noise_sampler(sigma_hat, sigmas[i + 1] * (gamma + 1)) * s_noise * sigma_up
+    return x
+
+
+@torch.no_grad()
+def sample_dpmpp_2m_dy(
+    model,
+    x,
+    sigmas,
+    extra_args=None,
+    callback=None,
+    disable=None,
+    s_noise=1.0,
+    s_dy_pow=-1,
+    s_extra_steps=True,
+):
+    """DPM-Solver++(2M)."""
+    extra_args = {} if extra_args is None else extra_args
+    s_in = x.new_ones([x.shape[0]])
+    sigma_fn = lambda t: t.neg().exp()
+    t_fn = lambda sigma: sigma.log().neg()
+    old_denoised = None
+    h_last = None
+    h = None
+
+    for i in trange(len(sigmas) - 1, disable=disable):
+        gamma = 2**0.5 - 1
+        if s_dy_pow >= 0:
+            gamma = gamma * (1.0 - (i / (len(sigmas) - 2)) ** s_dy_pow)
+        sigma_hat = sigmas[i] * (gamma + 1)
+        if gamma > 0:
+            eps = torch.randn_like(x) * s_noise
+            x = x - eps * (sigma_hat**2 - sigmas[i] ** 2) ** 0.5
+        denoised = model(x, sigma_hat * s_in, **extra_args)
+        if callback is not None:
+            callback({"x": x, "i": i, "sigma": sigmas[i], "sigma_hat": sigma_hat, "denoised": denoised})
+        t, t_next = t_fn(sigma_hat), t_fn(sigmas[i + 1])
+        h = t_next - t
+        if old_denoised is None or sigmas[i + 1] == 0:
+            x = (sigma_fn(t_next) / sigma_fn(t)) * x - (-h).expm1() * denoised
+        else:
+            r = h_last / h
+            denoised_d = (1 + 1 / (2 * r)) * denoised - (1 / (2 * r)) * old_denoised
+            x = (sigma_fn(t_next) / sigma_fn(t)) * x - (-h).expm1() * denoised_d
+        old_denoised = denoised
+        h_last = h
     return x
 
 
@@ -243,8 +288,10 @@ def sample_dpmpp_2m_sde_dy(
     if solver_type not in {"heun", "midpoint"}:
         raise ValueError("solver_type must be 'heun' or 'midpoint'")
 
+    gamma = 2**0.5 - 1
+
     seed = extra_args.get("seed", None)
-    sigma_min, sigma_max = sigmas[sigmas > 0].min(), sigmas.max()
+    sigma_min, sigma_max = sigmas[sigmas > 0].min(), sigmas.max() * (gamma + 1)
     noise_sampler = BrownianTreeNoiseSampler(x, sigma_min, sigma_max, seed=seed, cpu=True) if noise_sampler is None else noise_sampler
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
@@ -254,7 +301,6 @@ def sample_dpmpp_2m_sde_dy(
     h = None
 
     for i in trange(len(sigmas) - 1, disable=disable):
-        gamma = 2**0.5 - 1
         if s_dy_pow >= 0:
             gamma = gamma * (1.0 - (i / (len(sigmas) - 2)) ** s_dy_pow)
         sigma_hat = sigmas[i] * (gamma + 1)
@@ -284,7 +330,7 @@ def sample_dpmpp_2m_sde_dy(
 
             # TODO not working properly
             if eta:
-                x = x + noise_sampler(sigmas[i], sigmas[i + 1]) * sigmas[i + 1] * (-2 * eta_h).expm1().neg().sqrt() * s_noise
+                x = x + noise_sampler(sigma_hat, sigmas[i + 1] * (gamma + 1)) * sigmas[i + 1] * (-2 * eta_h).expm1().neg().sqrt() * s_noise
 
         old_denoised = denoised
         h_last = h
@@ -310,8 +356,10 @@ def sample_dpmpp_3m_sde_dy(
     if len(sigmas) <= 1:
         return x
 
+    gamma = 2**0.5 - 1
+
     seed = extra_args.get("seed", None)
-    sigma_min, sigma_max = sigmas[sigmas > 0].min(), sigmas.max()
+    sigma_min, sigma_max = sigmas[sigmas > 0].min(), sigmas.max() * (gamma + 1)
     noise_sampler = BrownianTreeNoiseSampler(x, sigma_min, sigma_max, seed=seed, cpu=True) if noise_sampler is None else noise_sampler
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
@@ -320,7 +368,6 @@ def sample_dpmpp_3m_sde_dy(
     h, h_1, h_2 = None, None, None
 
     for i in trange(len(sigmas) - 1, disable=disable):
-        gamma = 2**0.5 - 1
         if s_dy_pow >= 0:
             gamma = gamma * (1.0 - (i / (len(sigmas) - 2)) ** s_dy_pow)
         sigma_hat = sigmas[i] * (gamma + 1)
@@ -358,41 +405,11 @@ def sample_dpmpp_3m_sde_dy(
 
             # TODO not working properly
             if eta:
-                x = x + noise_sampler(sigmas[i], sigmas[i + 1]) * sigmas[i + 1] * (-2 * h * eta).expm1().neg().sqrt() * s_noise
+                x = x + noise_sampler(sigmas[i], sigmas[i + 1] * (gamma + 1)) * sigmas[i + 1] * (-2 * h * eta).expm1().neg().sqrt() * s_noise
 
         denoised_1, denoised_2 = denoised, denoised_1
         h_1, h_2 = h, h_1
     return x
-
-
-@torch.no_grad()
-def sample_dpmpp_2m_dy(
-    model,
-    x,
-    sigmas,
-    extra_args=None,
-    callback=None,
-    disable=None,
-    s_noise=1.0,
-    noise_sampler=None,
-    solver_type="midpoint",
-    s_dy_pow=-1,
-    s_extra_steps=True,
-):
-    return sample_dpmpp_2m_sde_dy(
-        model,
-        x,
-        sigmas,
-        extra_args,
-        callback,
-        disable,
-        0.0,
-        s_noise,
-        noise_sampler,
-        solver_type,
-        s_dy_pow,
-        s_extra_steps,
-    )
 
 
 @torch.no_grad()

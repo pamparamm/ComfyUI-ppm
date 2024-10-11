@@ -1,16 +1,26 @@
 # ComfyUI-ppm
 Just a bunch of random nodes modified/fixed/created by me or others. If any node starts throwing errors after an update - try to delete and re-add the node.
 
-I'll probably add some example workflows in the future (but I'm kinda lazy, kek).
+You can drag-and-drop workflow images from `examples/` into your ComfyUI. I'll probably add some more examples in future (but I'm kinda lazy, kek).
 
 # Nodes
 
 ## CLIPNegPip
-Modified implementation of NegPiP by [laksjdjf](https://github.com/laksjdjf) and [hako-mikan](https://github.com/hako-mikan). It uses ModelPatcher instead of monkey-patching, which should increase compatibility with other nodes. Compatible with weight interpretations from [Advanced CLIP Text Encode extension by BlenderNeko](https://github.com/BlenderNeko/ComfyUI_ADV_CLIP_emb).
+
+Supports SD1.5, SDXL and FLUX!
+
+Modified implementation of NegPiP by [laksjdjf](https://github.com/laksjdjf) and [hako-mikan](https://github.com/hako-mikan). It uses ModelPatcher instead of monkey-patching, which should increase compatibility with other nodes.
 
 `CLIPNegPip` node allows you to use negative weights in prompts. Connect the node before other model/clip patches.
 
 Read more about NegPiP [in the original repo](https://github.com/hako-mikan/sd-webui-negpip). I recommend to keep all dots/commas inside weight braces (i.e. `(worst quality,:-1.3) (sketch:-1.1,)` instead of `(worst quality:-1.3), (sketch:-1.1),`).
+
+Compatible with weight interpretations from [Advanced CLIP Text Encode extension by BlenderNeko](https://github.com/BlenderNeko/ComfyUI_ADV_CLIP_emb) and with [ComfyUI prompt control by asagi4](https://github.com/asagi4/comfyui-prompt-control/).
+Currently incompatible with [smZ Nodes by shiimizu](https://github.com/shiimizu/ComfyUI_smZNodes) (I'll address that issue later, for now you can use two compatible extensions above).
+
+### Example workflow (FLUX)
+
+![workflow_negpip_flux](examples/workflow_negpip_flux.png)
 
 ## AttentionCouplePPM
 Modified implementation of AttentionCouple by [laksjdjf](https://github.com/laksjdjf) and [Haoming02](https://github.com/Haoming02). I made `AttentionCouplePPM` node compatible with `CLIPNegPiP` node and with default `PatchModelAddDownscale (Kohya Deep Shrink)` node.
@@ -27,7 +37,7 @@ Contains some new samplers: `euler_ancestral_dy`, `dpmpp_2m_dy` and `dpmpp_3m_dy
 Tweaking `s_dy_pow` may reduce blur artifacts (optimal value is `2` for `euler_*` samplers and `-1` for `dpmpp_*` samplers, use `-1` to disable this feature).
 
 ## CFG++SamplerSelect
-Samplers adapted to [CFG++: Manifold-constrained Classifier Free Guidance for Diffusion Models by Chung et al.](https://cfgpp-diffusion.github.io/).
+Samplers adapted to [CFG++: Manifold-constrained Classifier Free Guidance for Diffusion Models by Chung et al.](https://cfgpp-diffusion.github.io/). Also contains converted samplers from Euler-Smea-Dyn.
 
 Should greatly reduce overexposure effect. Use together with `SamplerCustom` node. Don't forget to set CFG scale to 1.0-2.0 and PAG/SEG scale (if used) to 0.5-1.0.
 
