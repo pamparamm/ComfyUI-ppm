@@ -91,7 +91,7 @@ def _flux_forward_orig_negpip(
     txt_ids = txt_ids[:, 0::2, :]
     txt_negpip = txt[:, 1::2, :]
     txt = txt[:, 0::2, :]
-    mask = (txt == txt_negpip).max(dim=-1).values.int()
+    mask = (txt == txt_negpip).all(dim=-1).int()
     mask[mask == 0] = -1
 
     txt = _self.txt_in(txt)
