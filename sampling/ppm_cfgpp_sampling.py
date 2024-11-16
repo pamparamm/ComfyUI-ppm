@@ -33,12 +33,13 @@ def sample_dpmpp_2m_sde_cfg_pp(model, x, sigmas, extra_args=None, callback=None,
     s_in = x.new_ones([x.shape[0]])
 
     old_denoised = None
+    uncond_denoised = None
     h_last = None
     h = None
 
-    temp = [0]
     def post_cfg_function(args):
-        temp[0] = args["uncond_denoised"]
+        nonlocal uncond_denoised
+        uncond_denoised = args["uncond_denoised"]
         return args["denoised"]
 
     model_options = extra_args.get("model_options", {}).copy()
@@ -57,7 +58,7 @@ def sample_dpmpp_2m_sde_cfg_pp(model, x, sigmas, extra_args=None, callback=None,
             h = s - t
             eta_h = eta * h
 
-            x = sigmas[i + 1] / sigmas[i] * (-eta_h).exp() * (x + (denoised - temp[0])) + (-h - eta_h).expm1().neg() * denoised
+            x = sigmas[i + 1] / sigmas[i] * (-eta_h).exp() * (x + (denoised - uncond_denoised)) + (-h - eta_h).expm1().neg() * denoised
 
             if old_denoised is not None:
                 r = h_last / h
@@ -88,11 +89,12 @@ def sample_dpmpp_3m_sde_cfg_pp(model, x, sigmas, extra_args=None, callback=None,
     s_in = x.new_ones([x.shape[0]])
 
     denoised_1, denoised_2 = None, None
+    uncond_denoised = None
     h, h_1, h_2 = None, None, None
 
-    temp = [0]
     def post_cfg_function(args):
-        temp[0] = args["uncond_denoised"]
+        nonlocal uncond_denoised
+        uncond_denoised = args["uncond_denoised"]
         return args["denoised"]
 
     model_options = extra_args.get("model_options", {}).copy()
@@ -110,7 +112,7 @@ def sample_dpmpp_3m_sde_cfg_pp(model, x, sigmas, extra_args=None, callback=None,
             h = s - t
             h_eta = h * (eta + 1)
 
-            x = torch.exp(-h_eta) * (x + (denoised - temp[0])) + (-h_eta).expm1().neg() * denoised
+            x = torch.exp(-h_eta) * (x + (denoised - uncond_denoised)) + (-h_eta).expm1().neg() * denoised
 
             if h_2 is not None:
                 r0 = h_1 / h
@@ -165,9 +167,10 @@ def sample_dpmpp_2s_ancestral_cfg_pp(model, x, sigmas, extra_args=None, callback
     sigma_fn = lambda t: t.neg().exp()
     t_fn = lambda sigma: sigma.log().neg()
 
-    temp = [0]
+    uncond_denoised = None
     def post_cfg_function(args):
-        temp[0] = args["uncond_denoised"]
+        nonlocal uncond_denoised
+        uncond_denoised = args["uncond_denoised"]
         return args["denoised"]
 
     model_options = extra_args.get("model_options", {}).copy()
@@ -180,7 +183,7 @@ def sample_dpmpp_2s_ancestral_cfg_pp(model, x, sigmas, extra_args=None, callback
             callback({'x': x, 'i': i, 'sigma': sigmas[i], 'sigma_hat': sigmas[i], 'denoised': denoised})
         if sigma_down == 0:
             # Euler method
-            d = to_d(x, sigmas[i], temp[0])
+            d = to_d(x, sigmas[i], uncond_denoised)
             dt = sigma_down - sigmas[i]
             x = denoised + d * sigma_down
         else:
@@ -189,9 +192,9 @@ def sample_dpmpp_2s_ancestral_cfg_pp(model, x, sigmas, extra_args=None, callback
             r = 1 / 2
             h = t_next - t
             s = t + r * h
-            x_2 = (sigma_fn(s) / sigma_fn(t)) * (x + (denoised - temp[0])) - (-h * r).expm1() * denoised
+            x_2 = (sigma_fn(s) / sigma_fn(t)) * (x + (denoised - uncond_denoised)) - (-h * r).expm1() * denoised
             denoised_2 = model(x_2, sigma_fn(s) * s_in, **extra_args)
-            x = (sigma_fn(t_next) / sigma_fn(t)) * (x + (denoised - temp[0])) - (-h).expm1() * denoised_2
+            x = (sigma_fn(t_next) / sigma_fn(t)) * (x + (denoised - uncond_denoised)) - (-h).expm1() * denoised_2
         # Noise addition
         if sigmas[i + 1] > 0:
             x = x + noise_sampler(sigmas[i], sigmas[i + 1]) * s_noise * sigma_up

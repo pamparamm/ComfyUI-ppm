@@ -51,37 +51,6 @@ class EmptyLatentImageAR:
         return ({"samples": latent},)
 
 
-class EmptyLatentImageARAdvanced:
-    def __init__(self):
-        self.device = comfy.model_management.intermediate_device()
-
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "resolution": ("INT", {"default": 512, "min": 16, "max": MAX_RESOLUTION, "step": 8}),
-                "base_resolution": ("INT", {"default": 512, "min": 16, "max": MAX_RESOLUTION, "step": 8}),
-                "ratio": ("FLOAT", {"default": 1.0, "min": MIN_RATIO, "max": MAX_RATIO, "step": 0.001}),
-                "step": ("INT", {"default": 64, "min": 8, "max": 128, "step": 8}),
-                "batch_size": ("INT", {"default": 1, "min": 1, "max": 4096}),
-            }
-        }
-
-    RETURN_TYPES = ("LATENT", "LATENT")
-    RETURN_NAMES = ("latent", "base_latent")
-    FUNCTION = "generate"
-
-    CATEGORY = "latent"
-
-    def generate(self, resolution, base_resolution, ratio, step, batch_size=1):
-        width, height = _calc_dimensions(resolution, ratio, step)
-        base_width, base_height = _calc_dimensions(base_resolution, ratio, step)
-
-        latent = torch.zeros([batch_size, 4, height // 8, width // 8], device=self.device)
-        base_latent = torch.zeros([batch_size, 4, base_height // 8, base_width // 8], device=self.device)
-        return ({"samples": latent}, {"samples": base_latent})
-
-
 class LatentToWidthHeight:
     @classmethod
     def INPUT_TYPES(s):
@@ -122,7 +91,7 @@ class LatentToMaskBB:
             },
             "optional": {
                 "outer_value": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01}),
-            }
+            },
         }
 
     RETURN_TYPES = ("MASK",)

@@ -83,11 +83,14 @@ def sample_euler_dy_cfg_pp(
     s_tmin=0.0,
     s_tmax=float("inf"),
     s_noise=1.0,
-    s_dy_pow=-1,
+    s_gamma_start=0.0,
+    s_gamma_end=0.0,
     s_extra_steps=True,
 ):
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
+    gamma_start = round(s_gamma_start) if s_gamma_start > 1.0 else (len(sigmas) - 1) * s_gamma_start
+    gamma_end = round(s_gamma_end) if s_gamma_end > 1.0 else (len(sigmas) - 1) * s_gamma_end
 
     temp = [0]
 
@@ -101,12 +104,9 @@ def sample_euler_dy_cfg_pp(
     )
 
     for i in trange(len(sigmas) - 1, disable=disable):
-        gamma = max(s_churn / (len(sigmas) - 1), 2**0.5 - 1) if s_tmin <= sigmas[i] <= s_tmax else 0.0
-        if s_dy_pow >= 0:
-            gamma = gamma * (1.0 - (i / (len(sigmas) - 2)) ** s_dy_pow)
+        gamma = max(s_churn / (len(sigmas) - 1), 2**0.5 - 1) if gamma_start <= i < gamma_end and s_tmin <= sigmas[i] <= s_tmax else 0.0
         sigma_hat = sigmas[i] * (gamma + 1)
         # print(sigma_hat)
-        dt = sigmas[i + 1] - sigma_hat
         if gamma > 0:
             eps = torch.randn_like(x) * s_noise
             x = x - eps * (sigma_hat**2 - sigmas[i] ** 2) ** 0.5
@@ -161,11 +161,14 @@ def sample_euler_smea_dy_cfg_pp(
     s_tmin=0.0,
     s_tmax=float("inf"),
     s_noise=1.0,
-    s_dy_pow=-1,
+    s_gamma_start=0.0,
+    s_gamma_end=0.0,
     s_extra_steps=True,
 ):
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
+    gamma_start = round(s_gamma_start) if s_gamma_start > 1.0 else (len(sigmas) - 1) * s_gamma_start
+    gamma_end = round(s_gamma_end) if s_gamma_end > 1.0 else (len(sigmas) - 1) * s_gamma_end
 
     temp = [0]
 
@@ -179,11 +182,8 @@ def sample_euler_smea_dy_cfg_pp(
     )
 
     for i in trange(len(sigmas) - 1, disable=disable):
-        gamma = max(s_churn / (len(sigmas) - 1), 2**0.5 - 1) if s_tmin <= sigmas[i] <= s_tmax else 0.0
-        if s_dy_pow >= 0:
-            gamma = gamma * (1.0 - (i / (len(sigmas) - 2)) ** s_dy_pow)
+        gamma = max(s_churn / (len(sigmas) - 1), 2**0.5 - 1) if gamma_start <= i < gamma_end and s_tmin <= sigmas[i] <= s_tmax else 0.0
         sigma_hat = sigmas[i] * (gamma + 1)
-        dt = sigmas[i + 1] - sigma_hat
         if gamma > 0:
             eps = torch.randn_like(x) * s_noise
             x = x - eps * (sigma_hat**2 - sigmas[i] ** 2) ** 0.5
@@ -212,11 +212,14 @@ def sample_euler_ancestral_dy_cfg_pp(
     eta=1.0,
     s_noise=1.0,
     noise_sampler=None,
-    s_dy_pow=-1,
+    s_gamma_start=0.0,
+    s_gamma_end=0.0,
     s_extra_steps=True,
 ):
     extra_args = {} if extra_args is None else extra_args
     noise_sampler = default_noise_sampler(x) if noise_sampler is None else noise_sampler
+    gamma_start = round(s_gamma_start) if s_gamma_start > 1.0 else (len(sigmas) - 1) * s_gamma_start
+    gamma_end = round(s_gamma_end) if s_gamma_end > 1.0 else (len(sigmas) - 1) * s_gamma_end
 
     temp = [0]
 
@@ -231,25 +234,22 @@ def sample_euler_ancestral_dy_cfg_pp(
 
     s_in = x.new_ones([x.shape[0]])
     for i in trange(len(sigmas) - 1, disable=disable):
-        gamma = 2**0.5 - 1
-        if s_dy_pow >= 0:
-            gamma = gamma * (1.0 - (i / (len(sigmas) - 2)) ** s_dy_pow)
+        gamma = 2**0.5 - 1 if gamma_start <= i < gamma_end else 0.0
         sigma_hat = sigmas[i] * (gamma + 1)
         if gamma > 0:
             eps = torch.randn_like(x) * s_noise
             x = x - eps * (sigma_hat**2 - sigmas[i] ** 2) ** 0.5
 
         denoised = model(x, sigma_hat * s_in, **extra_args)
-        sigma_down, sigma_up = get_ancestral_step(sigma_hat, sigmas[i + 1], eta=eta)
+        sigma_down, sigma_up = get_ancestral_step(sigmas[i], sigmas[i + 1], eta=eta)
 
         if callback is not None:
             callback({"x": x, "i": i, "sigma": sigmas[i], "sigma_hat": sigma_hat, "denoised": denoised})
         d = to_d(x, sigma_hat, temp[0])
         # Euler method
-        dt = sigma_down - sigma_hat
         x = denoised + d * sigma_down
         if sigmas[i + 1] > 0:
-            x = x + noise_sampler(sigma_hat, sigmas[i + 1] * (gamma + 1)) * s_noise * sigma_up
+            x = x + noise_sampler(sigmas[i], sigmas[i + 1]) * s_noise * sigma_up
     return x
 
 
@@ -262,13 +262,16 @@ def sample_dpmpp_2m_dy_cfg_pp(
     callback=None,
     disable=None,
     s_noise=1.0,
-    s_dy_pow=-1,
+    s_gamma_start=0.0,
+    s_gamma_end=0.0,
     s_extra_steps=True,
 ):
     """DPM-Solver++(2M)."""
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
     t_fn = lambda sigma: sigma.log().neg()
+    gamma_start = round(s_gamma_start) if s_gamma_start > 1.0 else (len(sigmas) - 1) * s_gamma_start
+    gamma_end = round(s_gamma_end) if s_gamma_end > 1.0 else (len(sigmas) - 1) * s_gamma_end
 
     old_uncond_denoised = None
     uncond_denoised = None
@@ -286,9 +289,7 @@ def sample_dpmpp_2m_dy_cfg_pp(
     )
 
     for i in trange(len(sigmas) - 1, disable=disable):
-        gamma = 2**0.5 - 1
-        if s_dy_pow >= 0:
-            gamma = gamma * (1.0 - (i / (len(sigmas) - 2)) ** s_dy_pow)
+        gamma = 2**0.5 - 1 if gamma_start <= i < gamma_end else 0.0
         sigma_hat = sigmas[i] * (gamma + 1)
         if gamma > 0:
             eps = torch.randn_like(x) * s_noise

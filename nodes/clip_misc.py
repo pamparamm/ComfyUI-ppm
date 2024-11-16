@@ -1,5 +1,5 @@
 from comfy.sd import CLIP
-from nodes import ConditioningConcat, MAX_RESOLUTION
+from nodes import ConditioningConcat, ConditioningCombine, ConditioningZeroOut, ConditioningSetTimestepRange, MAX_RESOLUTION
 from node_helpers import conditioning_set_values
 
 
@@ -54,7 +54,7 @@ class CLIPMicroConditioning:
     RETURN_TYPES = ("CONDITIONING",)
     FUNCTION = "micro_conditioning"
 
-    CATEGORY = "conditioning"
+    CATEGORY = "advanced/conditioning"
 
     def micro_conditioning(self, cond, width, height, crop_w, crop_h, target_width, target_height):
         c = conditioning_set_values(
@@ -110,3 +110,30 @@ class CLIPTokenCounter:
         else:
             lengths = ["0"]
         return (lengths,)
+
+
+class ConditioningZeroOutCombine:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "conditioning": ("CONDITIONING",),
+                "zero_out_end": ("FLOAT", {"default": 0.1, "min": 0.0, "max": 1.0, "step": 0.001}),
+            }
+        }
+
+    RETURN_TYPES = ("CONDITIONING",)
+    FUNCTION = "zero_out_combine"
+
+    CATEGORY = "advanced/conditioning"
+
+    def zero_out_combine(self, conditioning, zero_out_end: float):
+        zero_out_node = ConditioningZeroOut()
+        timestep_node = ConditioningSetTimestepRange()
+        combine_node = ConditioningCombine()
+
+        c_zero = zero_out_node.zero_out(conditioning)[0]
+        c_zero = timestep_node.set_range(c_zero, 0.0, zero_out_end)[0]
+        c = timestep_node.set_range(conditioning, zero_out_end, 1.0)[0]
+        c_combined = combine_node.combine(c, c_zero)
+        return c_combined

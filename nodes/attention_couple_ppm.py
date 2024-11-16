@@ -4,6 +4,7 @@
 import torch
 import torch.nn.functional as F
 import math
+import itertools
 import comfy.model_management
 from comfy.model_patcher import ModelPatcher
 
@@ -13,30 +14,46 @@ COND = 0
 UNCOND = 1
 
 
-def get_neighbors(num: float):
-    def f_c(a):
-        return (math.floor(a), math.ceil(a))
-
-    return set([*f_c(num - 1), *f_c(num), *f_c(num + 1)])
-
-
 # Naive and totally inaccurate way to factorize target_res into rescaled integer width/height
-def rescale_size(width: int, height: int, target_res: int):
+def rescale_size(
+    width: int,
+    height: int,
+    target_res: int,
+    *,
+    tolerance=2,
+) -> tuple[int, int]:
+    tolerance = min(target_res, tolerance)
+
+    def get_neighbors(num: float):
+        if num < 1:
+            return None
+        numi = int(num)
+        return tuple(
+            numi + adj
+            for adj in sorted(
+                range(
+                    -min(numi - 1, tolerance),
+                    tolerance + 1 + math.ceil(num - numi),
+                ),
+                key=abs,
+            )
+        )
+
     scale = math.sqrt(height * width / target_res)
     height_scaled, width_scaled = height / scale, width / scale
     height_rounded = get_neighbors(height_scaled)
     width_rounded = get_neighbors(width_scaled)
-
-    for w in width_rounded:
-        _h = target_res / w
-        if _h % 1 == 0:
-            return w, int(_h)
-    for h in height_rounded:
-        _w = target_res / h
-        if _w % 1 == 0:
-            return int(_w), h
-
-    raise ValueError(f"Can't rescale {width} and {height} to fit {target_res}")
+    for h, w in itertools.zip_longest(height_rounded, width_rounded):
+        h_adj = target_res / w if w is not None else 0.1
+        if h_adj % 1 == 0:
+            return (w, int(h_adj))
+        if h is None:
+            continue
+        w_adj = target_res / h
+        if w_adj % 1 == 0:
+            return (int(w_adj), h)
+    msg = f"Can't rescale {width} and {height} to fit {target_res}"
+    raise ValueError(msg)
 
 
 def get_mask(mask, batch_size, num_tokens, original_shape):
