@@ -15,8 +15,14 @@ Modified implementation of NegPiP by [laksjdjf](https://github.com/laksjdjf) and
 
 Read more about NegPiP [in the original repo](https://github.com/hako-mikan/sd-webui-negpip). I recommend to keep all dots/commas inside weight braces (i.e. `(worst quality,:-1.3) (sketch:-1.1,)` instead of `(worst quality:-1.3), (sketch:-1.1),`).
 
-Compatible with weight interpretations from [Advanced CLIP Text Encode extension by BlenderNeko](https://github.com/BlenderNeko/ComfyUI_ADV_CLIP_emb) and with [ComfyUI prompt control by asagi4](https://github.com/asagi4/comfyui-prompt-control/).
-Currently incompatible with [smZ Nodes by shiimizu](https://github.com/shiimizu/ComfyUI_smZNodes) (I'll address that issue later, for now you can use two compatible extensions above).
+> [!NOTE]
+> `CLIPNegPip` is compatible with:
+> - [Advanced CLIP Text Encode extension by BlenderNeko](https://github.com/BlenderNeko/ComfyUI_ADV_CLIP_emb)
+> - [ComfyUI prompt control by asagi4](https://github.com/asagi4/comfyui-prompt-control/)
+>
+> `CLIPNegPip` is **incompatible** with:
+> - [smZ Nodes by shiimizu](https://github.com/shiimizu/ComfyUI_smZNodes) (for now you can use ComfyUI_ADV_CLIP_emb and comfyui-prompt-control instead)
+> - [Comfyui_Flux_Style_Adjust by yichengup](https://github.com/yichengup/Comfyui_Flux_Style_Adjust) (and probably some other custom nodes that modify cond tensors)
 
 ### Example workflow (FLUX)
 
