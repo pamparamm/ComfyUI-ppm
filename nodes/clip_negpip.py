@@ -52,9 +52,8 @@ def _encode_token_weights_negpip(_self: ClipTokenWeightEncoder, token_weight_pai
 
     output = []
     for k in range(0, sections):
-        # Hack for ComfyUI-GGUF extension
-        zk = torch.zeros_like(out[k : k + 1]).copy_(out[k : k + 1])
-        zv = torch.zeros_like(out[k : k + 1]).copy_(out[k : k + 1])
+        zk = out[k : k + 1].clone()
+        zv = out[k : k + 1].clone()
 
         if has_weights:
             z_empty = out[-1]
