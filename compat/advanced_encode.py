@@ -1,7 +1,15 @@
+import importlib
 import torch
+from functools import partial
 from math import copysign
 
 INITIALIZED = False
+
+
+def from_zero(weights, base_emb):
+    weight_tensor = torch.tensor(weights, dtype=base_emb.dtype, device=base_emb.device)
+    weight_tensor = weight_tensor.reshape(1, -1, 1).expand(base_emb.shape)
+    return base_emb * weight_tensor
 
 
 def _advanced_encode_from_tokens_negpip_wrapper(advanced_encode_from_tokens, from_zero):
@@ -16,6 +24,7 @@ def _advanced_encode_from_tokens_negpip_wrapper(advanced_encode_from_tokens, fro
         w_max=1.0,
         return_pooled=False,
         apply_to_pooled=False,
+        **extra_args,
     ):
         tokenized_abs = [[(t, abs(w), p) for t, w, p in x] for x in tokenized]
         weights_sign = [[copysign(1, w) for _, w, _ in x] for x in tokenized]
@@ -53,6 +62,7 @@ def _advanced_encode_from_tokens_negpip_wrapper(advanced_encode_from_tokens, fro
             w_max,
             return_pooled,
             apply_to_pooled,
+            **extra_args,
         )
 
         if encoded_with_negpip:
@@ -65,17 +75,9 @@ def _advanced_encode_from_tokens_negpip_wrapper(advanced_encode_from_tokens, fro
 
 def hijack_adv_encode():
     global INITIALIZED
-    if not INITIALIZED:
-        import sys
-        import pathlib
 
-        custom_nodes = pathlib.Path(__file__).parent.parent.parent
-        assert custom_nodes.name == "custom_nodes"
-
-        sys.path.insert(0, str(custom_nodes))
-
+    def _hijack_ADV_CLIP_emb():
         try:
-
             import custom_nodes.ComfyUI_ADV_CLIP_emb.adv_encode as adv_encode
             import ComfyUI_ADV_CLIP_emb.adv_encode as adv_encode_inner
 
@@ -88,6 +90,42 @@ def hijack_adv_encode():
 
         except ImportError:
             pass
+
+    def _hijack_prompt_control():
+        try:
+            adv_encode = importlib.import_module("custom_nodes.comfyui-prompt-control.prompt_control.adv_encode")
+            prompts = importlib.import_module("custom_nodes.comfyui-prompt-control.prompt_control.prompts")
+            prompts_inner = importlib.import_module("comfyui-prompt-control.prompt_control.prompts")
+
+            advanced_encode_from_tokens_negpip = _advanced_encode_from_tokens_negpip_wrapper(adv_encode.advanced_encode_from_tokens, from_zero)
+
+            def _make_patch_negpip(te_name, orig_fn, normalization, style, extra):
+                def encode(t):
+                    r = advanced_encode_from_tokens_negpip(t, normalization, style, orig_fn, return_pooled=True, apply_to_pooled=False, **extra)
+                    return prompts.apply_weights(r, te_name, extra.get("clip_weights"))
+
+                if "cuts" in extra:
+                    return partial(prompts.process_cuts, encode, extra)
+                return encode
+
+            prompts.make_patch = _make_patch_negpip
+            prompts_inner.make_patch = _make_patch_negpip
+
+        except ImportError:
+            pass
+
+    if not INITIALIZED:
+        import sys
+        import pathlib
+
+        custom_nodes = pathlib.Path(__file__).parent.parent.parent
+        assert custom_nodes.name == "custom_nodes"
+
+        sys.path.insert(0, str(custom_nodes))
+
+        try:
+            _hijack_ADV_CLIP_emb()
+            _hijack_prompt_control()
 
         finally:
             sys.path.pop(0)
