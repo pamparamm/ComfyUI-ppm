@@ -6,6 +6,7 @@ from .nodes.attention_couple_ppm import AttentionCouplePPM
 from .nodes.guidance_limiter import GuidanceLimiter, CFGLimiterGuider
 from .nodes.samplers import CFGPPSamplerSelect, DynSamplerSelect, PPMSamplerSelect
 from .nodes.freeu_adv import FreeU2PPM
+from .nodes.misc import ConvertTimestepToSigma
 
 from .schedulers import hijack_schedulers
 from .compat.advanced_encode import hijack_adv_encode
@@ -30,6 +31,7 @@ NODE_CLASS_MAPPINGS = {
     "DynSamplerSelect": DynSamplerSelect,
     "PPMSamplerSelect": PPMSamplerSelect,
     "FreeU2PPM": FreeU2PPM,
+    "ConvertTimestepToSigma": ConvertTimestepToSigma,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -49,6 +51,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "DynSamplerSelect": "DynSamplerSelect",
     "PPMSamplerSelect": "PPMSamplerSelect",
     "FreeU2PPM": "FreeU V2 (PPM)",
+    "ConvertTimestepToSigma": "Convert Timestep To Sigma",
 }
 
 

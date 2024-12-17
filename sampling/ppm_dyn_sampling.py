@@ -6,6 +6,7 @@ from comfy.k_diffusion.sampling import to_d, default_noise_sampler, get_ancestra
 
 SAMPLER_NAMES_DYN_ETA = [
     "euler_ancestral_dy",
+    "Kohaku_LoNyu_Yog",
 ]
 SAMPLER_NAMES_DYN = [
     "euler_dy",
@@ -74,11 +75,11 @@ def dy_sampling_step(x, model, dt, i, sigma, sigma_hat, callback, **extra_args):
         x_expanded = torch.zeros(original_shape, dtype=x.dtype, device=x.device)
         x_expanded[:, :, : 2 * m, : 2 * n] = x
         if extra_row:
-            x_expanded[:, :, -1:, : 2 * n + 1] = extra_row_content
+            x_expanded[:, :, -1:, : 2 * n + 1] = extra_row_content  # type: ignore
         if extra_col:
-            x_expanded[:, :, : 2 * m, -1:] = extra_col_content
+            x_expanded[:, :, : 2 * m, -1:] = extra_col_content  # type: ignore
         if extra_row and extra_col:
-            x_expanded[:, :, -1:, -1:] = extra_col_content[:, :, -1:, :]
+            x_expanded[:, :, -1:, -1:] = extra_col_content[:, :, -1:, :]  # type: ignore
         x = x_expanded
 
     return x
@@ -98,6 +99,7 @@ def sample_euler_dy(
     s_noise=1.0,
     s_dy_pow=-1,
     s_extra_steps=True,
+    **kwargs,
 ):
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
@@ -154,6 +156,7 @@ def sample_euler_smea_dy(
     s_noise=1.0,
     s_dy_pow=-1,
     s_extra_steps=True,
+    **kwargs,
 ):
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
@@ -193,7 +196,7 @@ def sample_euler_ancestral_dy(
     s_noise=1.0,
     noise_sampler=None,
     s_dy_pow=-1,
-    s_extra_steps=True,
+    **kwargs,
 ):
     extra_args = {} if extra_args is None else extra_args
     noise_sampler = default_noise_sampler(x) if noise_sampler is None else noise_sampler
@@ -231,7 +234,7 @@ def sample_dpmpp_2m_dy(
     disable=None,
     s_noise=1.0,
     s_dy_pow=-1,
-    s_extra_steps=True,
+    **kwargs,
 ):
     """DPM-Solver++(2M)."""
     extra_args = {} if extra_args is None else extra_args
@@ -279,7 +282,7 @@ def sample_dpmpp_2m_sde_dy(
     noise_sampler=None,
     solver_type="midpoint",
     s_dy_pow=-1,
-    s_extra_steps=True,
+    **kwargs,
 ):
     """DPM-Solver++(2M) SDE."""
     if len(sigmas) <= 1:
@@ -290,7 +293,7 @@ def sample_dpmpp_2m_sde_dy(
 
     gamma = 2**0.5 - 1
 
-    seed = extra_args.get("seed", None)
+    seed = extra_args.get("seed", None)  # type: ignore
     sigma_min, sigma_max = sigmas[sigmas > 0].min(), sigmas.max() * (gamma + 1)
     noise_sampler = BrownianTreeNoiseSampler(x, sigma_min, sigma_max, seed=seed, cpu=True) if noise_sampler is None else noise_sampler
     extra_args = {} if extra_args is None else extra_args
@@ -349,7 +352,7 @@ def sample_dpmpp_3m_sde_dy(
     s_noise=1.0,
     noise_sampler=None,
     s_dy_pow=-1,
-    s_extra_steps=True,
+    **kwargs,
 ):
     """DPM-Solver++(3M) SDE."""
 
@@ -358,7 +361,7 @@ def sample_dpmpp_3m_sde_dy(
 
     gamma = 2**0.5 - 1
 
-    seed = extra_args.get("seed", None)
+    seed = extra_args.get("seed", None)  # type: ignore
     sigma_min, sigma_max = sigmas[sigmas > 0].min(), sigmas.max() * (gamma + 1)
     noise_sampler = BrownianTreeNoiseSampler(x, sigma_min, sigma_max, seed=seed, cpu=True) if noise_sampler is None else noise_sampler
     extra_args = {} if extra_args is None else extra_args
@@ -391,7 +394,7 @@ def sample_dpmpp_3m_sde_dy(
                 r0 = h_1 / h
                 r1 = h_2 / h
                 d1_0 = (denoised - denoised_1) / r0
-                d1_1 = (denoised_1 - denoised_2) / r1
+                d1_1 = (denoised_1 - denoised_2) / r1  # type: ignore
                 d1 = d1_0 + (d1_0 - d1_1) * r0 / (r0 + r1)
                 d2 = (d1_0 - d1_1) / (r0 + r1)
                 phi_2 = h_eta.neg().expm1() / h_eta + 1
@@ -423,7 +426,7 @@ def sample_dpmpp_3m_dy(
     s_noise=1.0,
     noise_sampler=None,
     s_dy_pow=-1,
-    s_extra_steps=True,
+    **kwargs,
 ):
     return sample_dpmpp_3m_sde_dy(
         model,
@@ -436,5 +439,56 @@ def sample_dpmpp_3m_dy(
         s_noise,
         noise_sampler,
         s_dy_pow,
-        s_extra_steps,
+        **kwargs,
     )
+
+
+@torch.no_grad()
+def sample_Kohaku_LoNyu_Yog(
+    model,
+    x,
+    sigmas,
+    extra_args=None,
+    callback=None,
+    disable=None,
+    s_churn=0.0,
+    s_tmin=0.0,
+    s_tmax=float("inf"),
+    s_noise=1.0,
+    noise_sampler=None,
+    eta=1.0,
+    **kwargs,
+):
+    """Kohaku_LoNyu_Yog"""
+    extra_args = {} if extra_args is None else extra_args
+    s_in = x.new_ones([x.shape[0]])
+    noise_sampler = default_noise_sampler(x) if noise_sampler is None else noise_sampler
+    for i in trange(len(sigmas) - 1, disable=disable):
+        gamma = min(s_churn / (len(sigmas) - 1), 2**0.5 - 1) if s_tmin <= sigmas[i] <= s_tmax else 0.0
+        eps = torch.randn_like(x) * s_noise
+        sigma_hat = sigmas[i] * (gamma + 1)
+        if gamma > 0:
+            x = x + eps * (sigma_hat**2 - sigmas[i] ** 2) ** 0.5
+        denoised = model(x, sigma_hat * s_in, **extra_args)
+        d = to_d(x, sigma_hat, denoised)
+        sigma_down, sigma_up = get_ancestral_step(sigmas[i], sigmas[i + 1], eta=eta)
+        if callback is not None:
+            callback({"x": x, "i": i, "sigma": sigmas[i], "sigma_hat": sigma_hat, "denoised": denoised})
+        dt = sigma_down - sigmas[i]
+
+        if i <= (len(sigmas) - 1) / 2:
+            x2 = -x
+            denoised2 = model(x2, sigma_hat * s_in, **extra_args)
+            d2 = to_d(x2, sigma_hat, denoised2)
+
+            x3 = x + ((d + d2) / 2) * dt
+            denoised3 = model(x3, sigma_hat * s_in, **extra_args)
+            d3 = to_d(x3, sigma_hat, denoised3)
+
+            real_d = (d + d3) / 2
+            x = x + real_d * dt
+
+            x = x + noise_sampler(sigmas[i], sigmas[i + 1]) * s_noise * sigma_up
+        else:
+            x = x + d * dt
+    return x

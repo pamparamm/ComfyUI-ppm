@@ -6,13 +6,15 @@ import torch
 
 from comfy import model_management
 from comfy.model_patcher import ModelPatcher
-from comfy.model_base import Flux
+from comfy.model_base import Flux, HunyuanVideo
 from comfy.sd import CLIP
 from comfy.sd1_clip import SD1ClipModel, gen_empty_tokens, ClipTokenWeightEncoder
 from comfy.sdxl_clip import SDXLClipModel, SDXLRefinerClipModel
 from comfy.text_encoders.flux import FluxClipModel
+from comfy.text_encoders.hunyuan_video import HunyuanVideoClipModel
 
-from ..flux.flux_negpip import _flux_forward_orig_negpip
+from ..dit.flux_negpip import _flux_forward_orig_negpip
+from ..dit.hunyuan_video_negpip import _hunyuan_video_forward_orig_negpip
 
 
 def has_negpip(model_options: dict):
@@ -113,7 +115,7 @@ class CLIPNegPip:
 
         diffusion_model = type(m.model)
         clip_model = type(c.cond_stage_model)
-        valid_clip_models = [SD1ClipModel, SDXLClipModel, SDXLRefinerClipModel, FluxClipModel]
+        valid_clip_models = [SD1ClipModel, SDXLClipModel, SDXLRefinerClipModel, FluxClipModel, HunyuanVideoClipModel]
         is_clip_patched = False
 
         if any(issubclass(clip_model, t) for t in valid_clip_models) and not has_negpip(m.model_options):
@@ -126,11 +128,16 @@ class CLIPNegPip:
             if hasattr(c.patcher.model, "t5xxl"):
                 c.patcher.add_object_patch("t5xxl.encode_token_weights", partial(_encode_token_weights_negpip, c.patcher.model.t5xxl))
                 is_clip_patched = True
+            if hasattr(c.patcher.model, "llama"):
+                c.patcher.add_object_patch("llama.encode_token_weights", partial(_encode_token_weights_negpip, c.patcher.model.llama))
+                is_clip_patched = True
 
             if is_clip_patched:
                 m.set_model_attn2_patch(_negpip_attn)
 
                 if issubclass(diffusion_model, Flux):
                     m.add_object_patch("diffusion_model.forward_orig", partial(_flux_forward_orig_negpip, m.model.diffusion_model))
+                elif issubclass(diffusion_model, HunyuanVideo):
+                    m.add_object_patch("diffusion_model.forward_orig", partial(_hunyuan_video_forward_orig_negpip, m.model.diffusion_model))
 
         return (m, c)

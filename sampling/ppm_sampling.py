@@ -73,7 +73,7 @@ def sample_dpmpp_2m_gamma(
     cfg_pp=False,
     s_sigma_diff=2.0,
     s_sigma_max=None,
-    **kwargs
+    **kwargs,
 ):
     """DPM-Solver++(2M)."""
     extra_args = {} if extra_args is None else extra_args

@@ -7,7 +7,10 @@ You can drag-and-drop workflow images from `examples/` into your ComfyUI. I'll p
 
 ## CLIPNegPip
 
-Supports SD1.5, SDXL and FLUX!
+Supports:
+- SD1 - SDXL
+- FLUX
+- HunyuanVideo (untested)
 
 Modified implementation of NegPiP by [laksjdjf](https://github.com/laksjdjf) and [hako-mikan](https://github.com/hako-mikan). It uses ModelPatcher instead of monkey-patching, which should increase compatibility with other nodes.
 

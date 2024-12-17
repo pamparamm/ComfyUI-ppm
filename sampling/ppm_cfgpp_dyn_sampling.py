@@ -19,10 +19,11 @@ CFGPP_SAMPLER_NAMES_DYN = [
 
 @torch.no_grad()
 def dy_sampling_step_cfg_pp(x, model, sigma_next, i, sigma, sigma_hat, callback, **extra_args):
-    temp = [0]
+    uncond_denoised = None
 
     def post_cfg_function(args):
-        temp[0] = args["uncond_denoised"]
+        nonlocal uncond_denoised
+        uncond_denoised = args["uncond_denoised"]
         return args["denoised"]
 
     model_options = extra_args.get("model_options", {}).copy()
@@ -50,7 +51,7 @@ def dy_sampling_step_cfg_pp(x, model, sigma_next, i, sigma, sigma_hat, callback,
     if callback is not None:
         callback({"x": c, "i": i, "sigma": sigma, "sigma_hat": sigma_hat, "denoised": denoised})
 
-    d = to_d(c, sigma_hat, temp[0])
+    d = to_d(c, sigma_hat, uncond_denoised)
     c = denoised + d * sigma_next
 
     d_list = c.view(batch_size, channels, m * n, 1, 1)
@@ -61,11 +62,11 @@ def dy_sampling_step_cfg_pp(x, model, sigma_next, i, sigma, sigma_hat, callback,
         x_expanded = torch.zeros(original_shape, dtype=x.dtype, device=x.device)
         x_expanded[:, :, : 2 * m, : 2 * n] = x
         if extra_row:
-            x_expanded[:, :, -1:, : 2 * n + 1] = extra_row_content
+            x_expanded[:, :, -1:, : 2 * n + 1] = extra_row_content  # type: ignore
         if extra_col:
-            x_expanded[:, :, : 2 * m, -1:] = extra_col_content
+            x_expanded[:, :, : 2 * m, -1:] = extra_col_content  # type: ignore
         if extra_row and extra_col:
-            x_expanded[:, :, -1:, -1:] = extra_col_content[:, :, -1:, :]
+            x_expanded[:, :, -1:, -1:] = extra_col_content[:, :, -1:, :]  # type: ignore
         x = x_expanded
 
     return x
@@ -86,16 +87,18 @@ def sample_euler_dy_cfg_pp(
     s_gamma_start=0.0,
     s_gamma_end=0.0,
     s_extra_steps=True,
+    **kwargs,
 ):
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
     gamma_start = round(s_gamma_start) if s_gamma_start > 1.0 else (len(sigmas) - 1) * s_gamma_start
     gamma_end = round(s_gamma_end) if s_gamma_end > 1.0 else (len(sigmas) - 1) * s_gamma_end
 
-    temp = [0]
+    uncond_denoised = None
 
     def post_cfg_function(args):
-        temp[0] = args["uncond_denoised"]
+        nonlocal uncond_denoised
+        uncond_denoised = args["uncond_denoised"]
         return args["denoised"]
 
     model_options = extra_args.get("model_options", {}).copy()
@@ -113,7 +116,7 @@ def sample_euler_dy_cfg_pp(
         denoised = model(x, sigma_hat * s_in, **extra_args)
         if callback is not None:
             callback({"x": x, "i": i, "sigma": sigmas[i], "sigma_hat": sigma_hat, "denoised": denoised})
-        d = to_d(x, sigma_hat, temp[0])
+        d = to_d(x, sigma_hat, uncond_denoised)
         # Euler method
         x = denoised + d * sigmas[i + 1]
         if sigmas[i + 1] > 0 and s_extra_steps:
@@ -124,10 +127,11 @@ def sample_euler_dy_cfg_pp(
 
 @torch.no_grad()
 def smea_sampling_step_cfg_pp(x, model, sigma_next, i, sigma, sigma_hat, callback, **extra_args):
-    temp = [0]
+    uncond_denoised = None
 
     def post_cfg_function(args):
-        temp[0] = args["uncond_denoised"]
+        nonlocal uncond_denoised
+        uncond_denoised = args["uncond_denoised"]
         return args["denoised"]
 
     model_options = extra_args.get("model_options", {}).copy()
@@ -143,7 +147,7 @@ def smea_sampling_step_cfg_pp(x, model, sigma_next, i, sigma, sigma_hat, callbac
     if callback is not None:
         callback({"x": x, "i": i, "sigma": sigma, "sigma_hat": sigma_hat, "denoised": denoised})
 
-    d = to_d(x, sigma_hat, temp[0])
+    d = to_d(x, sigma_hat, uncond_denoised)
     x = denoised + d * sigma_next
     x = torch.nn.functional.interpolate(input=x, size=(m, n), mode="nearest-exact")
     return x
@@ -164,16 +168,18 @@ def sample_euler_smea_dy_cfg_pp(
     s_gamma_start=0.0,
     s_gamma_end=0.0,
     s_extra_steps=True,
+    **kwargs,
 ):
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
     gamma_start = round(s_gamma_start) if s_gamma_start > 1.0 else (len(sigmas) - 1) * s_gamma_start
     gamma_end = round(s_gamma_end) if s_gamma_end > 1.0 else (len(sigmas) - 1) * s_gamma_end
 
-    temp = [0]
+    uncond_denoised = None
 
     def post_cfg_function(args):
-        temp[0] = args["uncond_denoised"]
+        nonlocal uncond_denoised
+        uncond_denoised = args["uncond_denoised"]
         return args["denoised"]
 
     model_options = extra_args.get("model_options", {}).copy()
@@ -190,7 +196,7 @@ def sample_euler_smea_dy_cfg_pp(
         denoised = model(x, sigma_hat * s_in, **extra_args)
         if callback is not None:
             callback({"x": x, "i": i, "sigma": sigmas[i], "sigma_hat": sigma_hat, "denoised": denoised})
-        d = to_d(x, sigma_hat, temp[0])
+        d = to_d(x, sigma_hat, uncond_denoised)
         # Euler method
         x = denoised + d * sigmas[i + 1]
         if sigmas[i + 1] > 0 and s_extra_steps:
@@ -214,17 +220,18 @@ def sample_euler_ancestral_dy_cfg_pp(
     noise_sampler=None,
     s_gamma_start=0.0,
     s_gamma_end=0.0,
-    s_extra_steps=True,
+    **kwargs,
 ):
     extra_args = {} if extra_args is None else extra_args
     noise_sampler = default_noise_sampler(x) if noise_sampler is None else noise_sampler
     gamma_start = round(s_gamma_start) if s_gamma_start > 1.0 else (len(sigmas) - 1) * s_gamma_start
     gamma_end = round(s_gamma_end) if s_gamma_end > 1.0 else (len(sigmas) - 1) * s_gamma_end
 
-    temp = [0]
+    uncond_denoised = None
 
     def post_cfg_function(args):
-        temp[0] = args["uncond_denoised"]
+        nonlocal uncond_denoised
+        uncond_denoised = args["uncond_denoised"]
         return args["denoised"]
 
     model_options = extra_args.get("model_options", {}).copy()
@@ -245,7 +252,7 @@ def sample_euler_ancestral_dy_cfg_pp(
 
         if callback is not None:
             callback({"x": x, "i": i, "sigma": sigmas[i], "sigma_hat": sigma_hat, "denoised": denoised})
-        d = to_d(x, sigma_hat, temp[0])
+        d = to_d(x, sigma_hat, uncond_denoised)
         # Euler method
         x = denoised + d * sigma_down
         if sigmas[i + 1] > 0:
@@ -264,7 +271,7 @@ def sample_dpmpp_2m_dy_cfg_pp(
     s_noise=1.0,
     s_gamma_start=0.0,
     s_gamma_end=0.0,
-    s_extra_steps=True,
+    **kwargs,
 ):
     """DPM-Solver++(2M)."""
     extra_args = {} if extra_args is None else extra_args
