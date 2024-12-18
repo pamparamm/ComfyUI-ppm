@@ -2,6 +2,7 @@ import torch
 from torch import Tensor
 from comfy.ldm.hunyuan_video.model import HunyuanVideo
 from comfy.ldm.flux.layers import timestep_embedding
+from comfy.text_encoders.hunyuan_video import HunyuanVideoClipModel
 from .flux_negpip import _flux_dsb_forward_negpip, _flux_ssb_forward_negpip
 
 
@@ -88,14 +89,14 @@ def _hunyuan_video_forward_orig_negpip(
             def block_wrap(args):
                 out = {}
                 out["img"] = _flux_ssb_forward_negpip(
-                    block, args["img"], vec=args["vec"], pe=args["pe"], attn_mask=args["attention_mask"], negpip_mask=negpip_mask
+                    block, args["img"], vec=args["vec"], pe=args["pe"], attn_mask=args["attention_mask"], negpip_mask=negpip_mask, flipped_img_txt=True
                 )
                 return out
 
             out = blocks_replace[("single_block", i)]({"img": img, "vec": vec, "pe": pe, "attention_mask": attn_mask}, {"original_block": block_wrap})
             img = out["img"]
         else:
-            img = _flux_ssb_forward_negpip(block, img, vec=vec, pe=pe, attn_mask=attn_mask, negpip_mask=negpip_mask)
+            img = _flux_ssb_forward_negpip(block, img, vec=vec, pe=pe, attn_mask=attn_mask, negpip_mask=negpip_mask, flipped_img_txt=True)
 
         if control is not None:  # Controlnet
             control_o = control.get("output")
@@ -115,3 +116,27 @@ def _hunyuan_video_forward_orig_negpip(
     img = img.permute(0, 4, 1, 5, 2, 6, 3, 7)
     img = img.reshape(initial_shape)
     return img
+
+
+def _hunyuan_video_clip_encode_token_weights_negpip(self: HunyuanVideoClipModel, token_weight_pairs):
+    token_weight_pairs_l = token_weight_pairs["l"]
+    token_weight_pairs_llama = token_weight_pairs["llama"]
+
+    llama_out_negpip, llama_pooled, llama_extra_out = self.llama.encode_token_weights(token_weight_pairs_llama)
+    llama_out = llama_out_negpip[:, 0::2, :]
+
+    template_end = 0
+    for i, v in enumerate(token_weight_pairs_llama[0]):
+        if v[0] == 128007:  # <|end_header_id|>
+            template_end = i
+
+    if llama_out.shape[1] > (template_end + 2):
+        if token_weight_pairs_llama[0][template_end + 1][0] == 271:
+            template_end += 2
+    llama_out_negpip = llama_out_negpip[:, template_end * 2 :]
+    llama_extra_out["attention_mask"] = llama_extra_out["attention_mask"][:, template_end:]
+    if llama_extra_out["attention_mask"].sum() == torch.numel(llama_extra_out["attention_mask"]):
+        llama_extra_out.pop("attention_mask")  # attention mask is useless if no masked elements
+
+    l_out, l_pooled = self.clip_l.encode_token_weights(token_weight_pairs_l)
+    return llama_out_negpip, l_pooled, llama_extra_out

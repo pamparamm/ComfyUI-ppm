@@ -6,15 +6,21 @@ import torch
 
 from comfy import model_management
 from comfy.model_patcher import ModelPatcher
-from comfy.model_base import Flux, HunyuanVideo
+from comfy.model_base import Flux
 from comfy.sd import CLIP
-from comfy.sd1_clip import SD1ClipModel, gen_empty_tokens, ClipTokenWeightEncoder
-from comfy.sdxl_clip import SDXLClipModel, SDXLRefinerClipModel
-from comfy.text_encoders.flux import FluxClipModel
-from comfy.text_encoders.hunyuan_video import HunyuanVideoClipModel
+from comfy.sd1_clip import gen_empty_tokens, SDClipModel
 
 from ..dit.flux_negpip import _flux_forward_orig_negpip
-from ..dit.hunyuan_video_negpip import _hunyuan_video_forward_orig_negpip
+
+
+# Fallback for outdated ComfyUI
+IS_OUTDATED = False
+try:
+    from comfy.model_base import HunyuanVideo
+    from ..dit.hunyuan_video_negpip import _hunyuan_video_forward_orig_negpip, _hunyuan_video_clip_encode_token_weights_negpip
+
+except ImportError:
+    IS_OUTDATED = True
 
 
 def has_negpip(model_options: dict):
@@ -30,7 +36,7 @@ def _negpip_attn(q, k, v, extra_options):
     return q, new_k, new_v
 
 
-def _encode_token_weights_negpip(_self: ClipTokenWeightEncoder, token_weight_pairs):
+def _encode_token_weights_negpip(self: SDClipModel, token_weight_pairs):
     to_encode = list()
     max_token_len = 0
     has_weights = False
@@ -42,9 +48,9 @@ def _encode_token_weights_negpip(_self: ClipTokenWeightEncoder, token_weight_pai
 
     sections = len(to_encode)
     if has_weights or sections == 0:
-        to_encode.append(gen_empty_tokens(_self.special_tokens, max_token_len))
+        to_encode.append(gen_empty_tokens(self.special_tokens, max_token_len))
 
-    o = _self.encode(to_encode)
+    o = self.encode(to_encode)
     out, pooled = o[:2]
 
     if pooled is not None:
@@ -114,11 +120,9 @@ class CLIPNegPip:
         c = clip.clone()
 
         diffusion_model = type(m.model)
-        clip_model = type(c.cond_stage_model)
-        valid_clip_models = [SD1ClipModel, SDXLClipModel, SDXLRefinerClipModel, FluxClipModel, HunyuanVideoClipModel]
         is_clip_patched = False
 
-        if any(issubclass(clip_model, t) for t in valid_clip_models) and not has_negpip(m.model_options):
+        if not has_negpip(m.model_options):
             if hasattr(c.patcher.model, "clip_g"):
                 c.patcher.add_object_patch("clip_g.encode_token_weights", partial(_encode_token_weights_negpip, c.patcher.model.clip_g))
                 is_clip_patched = True
@@ -137,7 +141,8 @@ class CLIPNegPip:
 
                 if issubclass(diffusion_model, Flux):
                     m.add_object_patch("diffusion_model.forward_orig", partial(_flux_forward_orig_negpip, m.model.diffusion_model))
-                elif issubclass(diffusion_model, HunyuanVideo):
+                elif not IS_OUTDATED and issubclass(diffusion_model, HunyuanVideo):
+                    c.patcher.add_object_patch("encode_token_weights", partial(_hunyuan_video_clip_encode_token_weights_negpip, c.patcher.model))
                     m.add_object_patch("diffusion_model.forward_orig", partial(_hunyuan_video_forward_orig_negpip, m.model.diffusion_model))
 
         return (m, c)

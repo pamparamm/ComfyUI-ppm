@@ -36,7 +36,7 @@ def _flux_dsb_forward_negpip(
 
     txt_q, txt_k = self.txt_attn.norm(txt_q, txt_k, txt_v)
 
-    if self.flipped_img_txt:
+    if hasattr(self, "flipped_img_txt") and self.flipped_img_txt:
         # run actual attention
         attn = attention(torch.cat((img_q, txt_q), dim=2), torch.cat((img_k, txt_k), dim=2), torch.cat((img_v, txt_v), dim=2), pe=pe, mask=attn_mask)
 
@@ -68,6 +68,7 @@ def _flux_ssb_forward_negpip(
     pe: Tensor,
     attn_mask: Tensor | None = None,
     negpip_mask: Tensor | None = None,
+    flipped_img_txt: bool = False,
 ) -> Tensor:
     mod, _ = self.modulation(vec)
     x_mod = (1 + mod.scale) * self.pre_norm(x) + mod.shift
@@ -76,7 +77,10 @@ def _flux_ssb_forward_negpip(
     q, k, v = qkv.view(qkv.shape[0], qkv.shape[1], 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
 
     if negpip_mask is not None:
-        v[:, :, : negpip_mask.shape[1]] *= negpip_mask[:, None, :, None]
+        if flipped_img_txt:
+            v[:, :, -negpip_mask.shape[1] :] *= negpip_mask[:, None, :, None]
+        else:
+            v[:, :, : negpip_mask.shape[1]] *= negpip_mask[:, None, :, None]
 
     q, k = self.norm(q, k, v)
 
@@ -162,14 +166,14 @@ def _flux_forward_orig_negpip(
             def block_wrap(args):
                 out = {}
                 out["img"] = _flux_ssb_forward_negpip(
-                    block, args["img"], vec=args["vec"], pe=args["pe"], attn_mask=args.get("attn_mask"), negpip_mask=negpip_mask
+                    block, args["img"], vec=args["vec"], pe=args["pe"], attn_mask=args.get("attn_mask"), negpip_mask=negpip_mask, flipped_img_txt=False
                 )
                 return out
 
             out = blocks_replace[("single_block", i)]({"img": img, "vec": vec, "pe": pe, "attn_mask": attn_mask}, {"original_block": block_wrap})
             img = out["img"]
         else:
-            img = _flux_ssb_forward_negpip(block, img, vec=vec, pe=pe, attn_mask=attn_mask, negpip_mask=negpip_mask)
+            img = _flux_ssb_forward_negpip(block, img, vec=vec, pe=pe, attn_mask=attn_mask, negpip_mask=negpip_mask, flipped_img_txt=False)
 
         if control is not None:  # Controlnet
             control_o = control.get("output")
