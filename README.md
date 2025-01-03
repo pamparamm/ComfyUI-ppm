@@ -51,9 +51,15 @@ Samplers adapted to [CFG++: Manifold-constrained Classifier Free Guidance for Di
 Should greatly reduce overexposure effect. Use together with `SamplerCustom` node. Don't forget to set CFG scale to 1.0-2.0 and PAG/SEG scale (if used) to 0.5-1.0.
 
 ## Guidance Limiter
-Implementation of [Applying Guidance in a Limited Interval Improves Sample and Distribution Quality in Diffusion Models by Kynkäänniemi et al.](https://arxiv.org/abs/2404.07724) (also contains `RescaleCFG` functionality)
+Implementation of [Applying Guidance in a Limited Interval Improves Sample and Distribution Quality in Diffusion Models by Kynkäänniemi et al.](https://arxiv.org/abs/2404.07724) as a post CFG function.
 
 Guidance Limiter is also available as a `CFGLimiterGuider` guider node for `SamplerCustomAdvanced`.
+
+## RescaleCFGPost
+`RescaleCFG` rewritten as a post CFG function, should be more compatible with other CFG related nodes.
+
+## DynamicThresholdingSimplePost
+Rewritten `DynamicThresholdingSimple` from [sd-dynamic-thresholding by mcmonkey4eva](https://github.com/mcmonkeyprojects/sd-dynamic-thresholding) as a post CFG function, should be more compatible with other CFG related nodes.
 
 ## Empty Latent Image (Aspect Ratio)
 `Empty Latent Image (Aspect Ratio)` node generates empty latent with specified aspect ratio and with respect to target resolution.

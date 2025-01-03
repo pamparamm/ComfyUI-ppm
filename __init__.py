@@ -3,7 +3,7 @@ from .nodes.latent_tonemap import LatentOperationTonemapLuminance
 from .nodes.clip_misc import CLIPTextEncodeBREAK, CLIPMicroConditioning, CLIPTokenCounter, ConditioningZeroOutCombine
 from .nodes.clip_negpip import CLIPNegPip
 from .nodes.attention_couple_ppm import AttentionCouplePPM
-from .nodes.guidance_limiter import GuidanceLimiter, CFGLimiterGuider
+from .nodes.guidance import GuidanceLimiter, CFGLimiterGuider, RescaleCFGPost, DynamicThresholdingSimplePost
 from .nodes.samplers import CFGPPSamplerSelect, DynSamplerSelect, PPMSamplerSelect
 from .nodes.freeu_adv import FreeU2PPM
 from .nodes.misc import ConvertTimestepToSigma
@@ -27,6 +27,8 @@ NODE_CLASS_MAPPINGS = {
     "AttentionCouplePPM": AttentionCouplePPM,
     "Guidance Limiter": GuidanceLimiter,
     "CFGLimiterGuider": CFGLimiterGuider,
+    "RescaleCFGPost": RescaleCFGPost,
+    "DynamicThresholdingSimplePost": DynamicThresholdingSimplePost,
     "CFGPPSamplerSelect": CFGPPSamplerSelect,
     "DynSamplerSelect": DynSamplerSelect,
     "PPMSamplerSelect": PPMSamplerSelect,
@@ -47,6 +49,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "AttentionCouplePPM": "Attention Couple (PPM)",
     "Guidance Limiter": "Guidance Limiter",
     "CFGLimiterGuider": "CFGLimiterGuider",
+    "RescaleCFGPost": "RescaleCFGPost",
+    "DynamicThresholdingSimplePost": "DynamicThresholdingSimplePost",
     "CFGPPSamplerSelect": "CFG++SamplerSelect",
     "DynSamplerSelect": "DynSamplerSelect",
     "PPMSamplerSelect": "PPMSamplerSelect",
