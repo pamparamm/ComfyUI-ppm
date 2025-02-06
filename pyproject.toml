@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-ppm"
 description = "Fixed AttentionCouple, NegPip(negative weights in prompts) for SDXL, FLUX and HunyuanVideo, more CFG++ and SMEA DY samplers, etc."
-version = "1.0.21"
+version = "1.0.22"
 license = { text = "GNU Affero General Public License v3" }
 
 [project.urls]
@@ -12,3 +12,6 @@ Repository = "https://github.com/pamparamm/ComfyUI-ppm"
 PublisherId = "pamparamm"
 DisplayName = "ComfyUI-ppm"
 Icon = ""
+
+[tool.ruff]
+lint.select = ["S307", "S102", "T", "W", "F"]

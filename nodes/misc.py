@@ -1,3 +1,5 @@
+import torch
+from comfy.model_base import ModelSamplingDiscrete
 from comfy.model_patcher import ModelPatcher
 
 
@@ -22,13 +24,20 @@ class ConvertTimestepToSigma:
     FUNCTION = "convert"
     CATEGORY = "sampling/custom_sampling/sigmas"
 
-    def convert(self, model: ModelPatcher, mode: str, percent: float = 0.0, schedule_sigmas=None, schedule_step: int = 0):
-        model_sampling = model.get_model_object("model_sampling")
+    def convert(
+        self,
+        model: ModelPatcher,
+        mode: str,
+        percent: float = 0.0,
+        schedule_sigmas: list[torch.Tensor] = [],
+        schedule_step: int = 0,
+    ):
+        model_sampling: ModelSamplingDiscrete = model.get_model_object("model_sampling")  # type: ignore
         sigma = -1.0
 
         if mode == "percent":
             sigma = model_sampling.percent_to_sigma(percent)
-        elif mode == "schedule_step":
+        elif mode == "schedule_step" and schedule_sigmas:
             sigma = schedule_sigmas[schedule_step]
 
         return (sigma,)

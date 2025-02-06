@@ -37,4 +37,3 @@ app.registerExtension({
         }
     },
 });
-

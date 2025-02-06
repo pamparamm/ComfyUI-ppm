@@ -1,8 +1,10 @@
 import math
+from typing import Literal
 import torch
 
 import comfy.model_management
 from nodes import MAX_RESOLUTION
+from comfy_extras.nodes_mask import MaskComposite
 
 
 MIN_RATIO = 0.15
@@ -99,7 +101,16 @@ class LatentToMaskBB:
 
     CATEGORY = "mask"
 
-    def get_bounding_box(self, latent, x: float, y: float, w: float, h: float, value: float = 1.0, outer_value: float = 0.0):
+    def get_bounding_box(
+        self,
+        latent,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        value: float = 1.0,
+        outer_value: float = 0.0,
+    ):
         x_end, y_end = x + w, y + h
         if x_end > 1.0 or y_end > 1.0:
             raise ValueError("x + w and y + h must be less than 1.0")
@@ -116,3 +127,35 @@ class LatentToMaskBB:
         mask[y_coord:y_end_coord, x_coord:x_end_coord] = value
 
         return (mask.unsqueeze(0),)
+
+
+class MaskCompositePPM:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "mask_1": ("MASK",),
+                "operation": (["multiply", "add", "subtract", "and", "or", "xor"], {"default": "add"}),
+            },
+        }
+
+    RETURN_TYPES = ("MASK",)
+    FUNCTION = "combine"
+
+    CATEGORY = "mask"
+
+    def combine(
+        self,
+        operation: Literal["multiply", "add", "subtract", "and", "or", "xor"],
+        **kwargs: torch.Tensor,
+    ):
+        output: torch.Tensor | None = None
+        maskComposite = MaskComposite()
+
+        for mask in kwargs.values():
+            if output is None:
+                output = mask
+                continue
+            output = maskComposite.combine(output, mask, 0, 0, operation)[0]
+
+        return (output,)
