@@ -32,7 +32,7 @@ Read more about NegPiP [in the original repo](https://github.com/hako-mikan/sd-w
 ![workflow_negpip_flux](examples/workflow_negpip_flux.png)
 
 ## AttentionCouplePPM
-Modified implementation of AttentionCouple by [laksjdjf](https://github.com/laksjdjf) and [Haoming02](https://github.com/Haoming02). I made `AttentionCouplePPM` node compatible with `CLIPNegPiP` node and with default `PatchModelAddDownscale (Kohya Deep Shrink)` node.
+Modified implementation of AttentionCouple by [laksjdjf](https://github.com/laksjdjf) and [Haoming02](https://github.com/Haoming02). I made `AttentionCouplePPM` node compatible with `CLIPNegPiP` and with default `PatchModelAddDownscale (Kohya Deep Shrink)` node. It's also compatible with [IP Adapter plus by cubiq](https://github.com/cubiq/ComfyUI_IPAdapter_plus)!
 
 Inputs for new regions are managed automatically: when you attach cond/mask of a region to the node, a new `cond_` / `mask_` input appears. Last `cond_` / `mask_` inputs are always optional.
 
