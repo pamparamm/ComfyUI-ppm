@@ -6,42 +6,33 @@ import torch
 
 from comfy import model_management
 from comfy.model_patcher import ModelPatcher
-from comfy.model_base import Flux
+from comfy.model_base import Flux, HunyuanVideo, HunyuanVideoI2V
 from comfy.sd import CLIP
 from comfy.sd1_clip import gen_empty_tokens, SDClipModel
 
-from ..dit.flux_negpip import _flux_forward_orig_negpip
-
-
-# Fallback for outdated ComfyUI
-IS_OUTDATED = False
-try:
-    from comfy.model_base import HunyuanVideo
-    from ..dit.hunyuan_video_negpip import (
-        _hunyuan_video_forward_orig_negpip,
-        _hunyuan_video_clip_encode_token_weights_negpip,
-    )
-
-except ImportError:
-    IS_OUTDATED = True
+from ..dit.flux_negpip import flux_forward_orig_negpip
+from ..dit.hunyuan_video_negpip import (
+    hunyuan_video_forward_orig_negpip,
+    hunyuan_video_clip_encode_token_weights_negpip,
+)
 
 
 def has_negpip(model_options: dict):
     try:
-        return _negpip_attn.__class__ in map(
+        return negpip_attn.__class__ in map(
             lambda _: _.__class__, model_options["transformer_options"]["patches"]["attn2_patch"]
         )
     except KeyError:
         return False
 
 
-def _negpip_attn(q, k, v, extra_options):
+def negpip_attn(q, k, v, extra_options):
     new_k = k[:, 0::2]
     new_v = v[:, 1::2]
     return q, new_k, new_v
 
 
-def _encode_token_weights_negpip(self: SDClipModel, token_weight_pairs):
+def encode_token_weights_negpip(self: SDClipModel, token_weight_pairs):
     to_encode = list()
     max_token_len = 0
     has_weights = False
@@ -53,7 +44,10 @@ def _encode_token_weights_negpip(self: SDClipModel, token_weight_pairs):
 
     sections = len(to_encode)
     if has_weights or sections == 0:
-        to_encode.append(gen_empty_tokens(self.special_tokens, max_token_len))
+        if hasattr(self, "gen_empty_tokens"):
+            to_encode.append(self.gen_empty_tokens(self.special_tokens, max_token_len))  # type: ignore
+        else:
+            to_encode.append(gen_empty_tokens(self.special_tokens, max_token_len))
 
     o = self.encode(to_encode)
     out, pooled = o[:2]
@@ -67,7 +61,6 @@ def _encode_token_weights_negpip(self: SDClipModel, token_weight_pairs):
     for k in range(0, sections):
         zk = out[k : k + 1].clone()
         zv = out[k : k + 1].clone()
-
         if has_weights:
             z_empty = out[-1]
             for i in range(len(zk)):
@@ -130,40 +123,40 @@ class CLIPNegPip:
         if not has_negpip(m.model_options):
             if hasattr(c.patcher.model, "clip_g"):
                 c.patcher.add_object_patch(
-                    "clip_g.encode_token_weights", partial(_encode_token_weights_negpip, c.patcher.model.clip_g)
+                    "clip_g.encode_token_weights", partial(encode_token_weights_negpip, c.patcher.model.clip_g)
                 )
                 is_clip_patched = True
             if hasattr(c.patcher.model, "clip_l"):
                 c.patcher.add_object_patch(
-                    "clip_l.encode_token_weights", partial(_encode_token_weights_negpip, c.patcher.model.clip_l)
+                    "clip_l.encode_token_weights", partial(encode_token_weights_negpip, c.patcher.model.clip_l)
                 )
                 is_clip_patched = True
             if hasattr(c.patcher.model, "t5xxl"):
                 c.patcher.add_object_patch(
-                    "t5xxl.encode_token_weights", partial(_encode_token_weights_negpip, c.patcher.model.t5xxl)
+                    "t5xxl.encode_token_weights", partial(encode_token_weights_negpip, c.patcher.model.t5xxl)
                 )
                 is_clip_patched = True
             if hasattr(c.patcher.model, "llama"):
                 c.patcher.add_object_patch(
-                    "llama.encode_token_weights", partial(_encode_token_weights_negpip, c.patcher.model.llama)
+                    "llama.encode_token_weights", partial(encode_token_weights_negpip, c.patcher.model.llama)
                 )
                 is_clip_patched = True
 
             if is_clip_patched:
-                m.set_model_attn2_patch(_negpip_attn)
+                m.set_model_attn2_patch(negpip_attn)
 
                 if issubclass(diffusion_model, Flux):
                     m.add_object_patch(
-                        "diffusion_model.forward_orig", partial(_flux_forward_orig_negpip, m.model.diffusion_model)
+                        "diffusion_model.forward_orig", partial(flux_forward_orig_negpip, m.model.diffusion_model)
                     )
-                elif not IS_OUTDATED and issubclass(diffusion_model, HunyuanVideo):
+                if issubclass(diffusion_model, HunyuanVideo):
                     c.patcher.add_object_patch(
                         "encode_token_weights",
-                        partial(_hunyuan_video_clip_encode_token_weights_negpip, c.patcher.model),
+                        partial(hunyuan_video_clip_encode_token_weights_negpip, c.patcher.model),
                     )
                     m.add_object_patch(
                         "diffusion_model.forward_orig",
-                        partial(_hunyuan_video_forward_orig_negpip, m.model.diffusion_model),
+                        partial(hunyuan_video_forward_orig_negpip, m.model.diffusion_model),
                     )
 
         return (m, c)

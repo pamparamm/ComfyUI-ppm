@@ -37,7 +37,7 @@ class ConvertTimestepToSigma:
 
         if mode == "percent":
             sigma = model_sampling.percent_to_sigma(percent)
-        elif mode == "schedule_step" and schedule_sigmas:
+        elif mode == "schedule_step" and schedule_sigmas is not None:
             sigma = schedule_sigmas[schedule_step]
 
         return (sigma,)

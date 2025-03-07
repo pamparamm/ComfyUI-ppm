@@ -1,12 +1,13 @@
+import numbers
 import torch
 from torch import Tensor
 from comfy.ldm.hunyuan_video.model import HunyuanVideo
 from comfy.ldm.flux.layers import timestep_embedding
 from comfy.text_encoders.hunyuan_video import HunyuanVideoClipModel
-from .flux_negpip import _flux_dsb_forward_negpip, _flux_ssb_forward_negpip
+from .flux_negpip import flux_dsb_forward_negpip, flux_ssb_forward_negpip
 
 
-def _hunyuan_video_forward_orig_negpip(
+def hunyuan_video_forward_orig_negpip(
     self: HunyuanVideo,
     img: Tensor,
     img_ids: Tensor,
@@ -29,9 +30,8 @@ def _hunyuan_video_forward_orig_negpip(
     vec = vec + self.vector_in(y[:, : self.params.vec_in_dim])
 
     if self.params.guidance_embed:
-        if guidance is None:
-            raise ValueError("Didn't get guidance strength for guidance distilled model.")
-        vec = vec + self.guidance_in(timestep_embedding(guidance, 256).to(img.dtype))
+        if guidance is not None:
+            vec = vec + self.guidance_in(timestep_embedding(guidance, 256).to(img.dtype))
 
     txt_ids = txt_ids[:, 0::2, :]
     txt_negpip = txt[:, 1::2, :]
@@ -61,18 +61,39 @@ def _hunyuan_video_forward_orig_negpip(
 
             def block_wrap(args):
                 out = {}
-                out["img"], out["txt"] = _flux_dsb_forward_negpip(
-                    block, img=args["img"], txt=args["txt"], vec=args["vec"], pe=args["pe"], attn_mask=args["attention_mask"], negpip_mask=negpip_mask
+                out["img"], out["txt"] = flux_dsb_forward_negpip(
+                    block,
+                    img=args["img"],
+                    txt=args["txt"],
+                    vec=args["vec"],
+                    pe=args["pe"],
+                    attn_mask=args["attention_mask"],
+                    negpip_mask=negpip_mask,
                 )
                 return out
 
             out = blocks_replace[("double_block", i)](
-                {"img": img, "txt": txt, "vec": vec, "pe": pe, "attention_mask": attn_mask}, {"original_block": block_wrap}
+                {
+                    "img": img,
+                    "txt": txt,
+                    "vec": vec,
+                    "pe": pe,
+                    "attention_mask": attn_mask,
+                },
+                {"original_block": block_wrap},
             )
             txt = out["txt"]
             img = out["img"]
         else:
-            img, txt = _flux_dsb_forward_negpip(block, img=img, txt=txt, vec=vec, pe=pe, attn_mask=attn_mask, negpip_mask=negpip_mask)
+            img, txt = flux_dsb_forward_negpip(
+                block,
+                img=img,
+                txt=txt,
+                vec=vec,
+                pe=pe,
+                attn_mask=attn_mask,
+                negpip_mask=negpip_mask,
+            )
 
         if control is not None:  # Controlnet
             control_i = control.get("input")
@@ -88,15 +109,37 @@ def _hunyuan_video_forward_orig_negpip(
 
             def block_wrap(args):
                 out = {}
-                out["img"] = _flux_ssb_forward_negpip(
-                    block, args["img"], vec=args["vec"], pe=args["pe"], attn_mask=args["attention_mask"], negpip_mask=negpip_mask, flipped_img_txt=True
+                out["img"] = flux_ssb_forward_negpip(
+                    block,
+                    args["img"],
+                    vec=args["vec"],
+                    pe=args["pe"],
+                    attn_mask=args["attention_mask"],
+                    negpip_mask=negpip_mask,
+                    flipped_img_txt=True,
                 )
                 return out
 
-            out = blocks_replace[("single_block", i)]({"img": img, "vec": vec, "pe": pe, "attention_mask": attn_mask}, {"original_block": block_wrap})
+            out = blocks_replace[("single_block", i)](
+                {
+                    "img": img,
+                    "vec": vec,
+                    "pe": pe,
+                    "attention_mask": attn_mask,
+                },
+                {"original_block": block_wrap},
+            )
             img = out["img"]
         else:
-            img = _flux_ssb_forward_negpip(block, img, vec=vec, pe=pe, attn_mask=attn_mask, negpip_mask=negpip_mask, flipped_img_txt=True)
+            img = flux_ssb_forward_negpip(
+                block,
+                img,
+                vec=vec,
+                pe=pe,
+                attn_mask=attn_mask,
+                negpip_mask=negpip_mask,
+                flipped_img_txt=True,
+            )
 
         if control is not None:  # Controlnet
             control_o = control.get("output")
@@ -118,7 +161,7 @@ def _hunyuan_video_forward_orig_negpip(
     return img
 
 
-def _hunyuan_video_clip_encode_token_weights_negpip(self: HunyuanVideoClipModel, token_weight_pairs):
+def hunyuan_video_clip_encode_token_weights_negpip(self: HunyuanVideoClipModel, token_weight_pairs):
     token_weight_pairs_l = token_weight_pairs["l"]
     token_weight_pairs_llama = token_weight_pairs["llama"]
 
@@ -126,17 +169,44 @@ def _hunyuan_video_clip_encode_token_weights_negpip(self: HunyuanVideoClipModel,
     llama_out = llama_out_negpip[:, 0::2, :]
 
     template_end = 0
-    for i, v in enumerate(token_weight_pairs_llama[0]):
-        if v[0] == 128007:  # <|end_header_id|>
-            template_end = i
+    image_start = None
+    image_end = None
+    extra_sizes = 0
+    user_end = 9999999999999
+
+    tok_pairs = token_weight_pairs_llama[0]
+    for i, v in enumerate(tok_pairs):
+        elem = v[0]
+        if not torch.is_tensor(elem):
+            if isinstance(elem, numbers.Integral):
+                if elem == 128006:
+                    if tok_pairs[i + 1][0] == 882:
+                        if tok_pairs[i + 2][0] == 128007:
+                            template_end = i + 2
+                            user_end = -1
+                if elem == 128009 and user_end == -1:
+                    user_end = i + 1
+            else:
+                if elem.get("original_type") == "image":
+                    elem_size = elem.get("data").shape[0]
+                    if image_start is None:
+                        image_start = i + extra_sizes
+                        image_end = i + elem_size + extra_sizes
+                    extra_sizes += elem_size - 1
 
     if llama_out.shape[1] > (template_end + 2):
-        if token_weight_pairs_llama[0][template_end + 1][0] == 271:
+        if tok_pairs[template_end + 1][0] == 271:
             template_end += 2
-    llama_out_negpip = llama_out_negpip[:, template_end * 2 :]
-    llama_extra_out["attention_mask"] = llama_extra_out["attention_mask"][:, template_end:]
+    llama_out_negpip = llama_out_negpip[:, (template_end + extra_sizes) * 2 : (user_end + extra_sizes) * 2]
+    llama_extra_out["attention_mask"] = llama_extra_out["attention_mask"][
+        :, template_end + extra_sizes : user_end + extra_sizes
+    ]
     if llama_extra_out["attention_mask"].sum() == torch.numel(llama_extra_out["attention_mask"]):
         llama_extra_out.pop("attention_mask")  # attention mask is useless if no masked elements
+
+    if image_start is not None:
+        image_output = llama_out_negpip[:, image_start * 2 : image_end * 2]  # type: ignore
+        llama_out_negpip = torch.cat([image_output[:, ::2], llama_out_negpip], dim=1)
 
     l_out, l_pooled = self.clip_l.encode_token_weights(token_weight_pairs_l)
     return llama_out_negpip, l_pooled, llama_extra_out

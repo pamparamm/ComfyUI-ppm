@@ -14,6 +14,7 @@ from .nodes.guidance import (
     RescaleCFGPost,
     DynamicThresholdingSimplePost,
     DynamicThresholdingPost,
+    RenormCFGPost,
 )
 from .nodes.samplers import CFGPPSamplerSelect, DynSamplerSelect, PPMSamplerSelect
 from .nodes.freeu_adv import FreeU2PPM
@@ -42,6 +43,7 @@ NODE_CLASS_MAPPINGS = {
     "RescaleCFGPost": RescaleCFGPost,
     "DynamicThresholdingSimplePost": DynamicThresholdingSimplePost,
     "DynamicThresholdingPost": DynamicThresholdingPost,
+    "RenormCFGPost": RenormCFGPost,
     "CFGPPSamplerSelect": CFGPPSamplerSelect,
     "DynSamplerSelect": DynSamplerSelect,
     "PPMSamplerSelect": PPMSamplerSelect,
@@ -66,6 +68,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RescaleCFGPost": "RescaleCFGPost",
     "DynamicThresholdingSimplePost": "DynamicThresholdingSimplePost",
     "DynamicThresholdingPost": "DynamicThresholdingFullPost",
+    "RenormCFGPost": "RenormCFGPost",
     "CFGPPSamplerSelect": "CFG++SamplerSelect",
     "DynSamplerSelect": "DynSamplerSelect",
     "PPMSamplerSelect": "PPMSamplerSelect",

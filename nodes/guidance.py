@@ -1,4 +1,5 @@
 import torch
+from comfy.model_patcher import ModelPatcher
 import comfy.samplers
 from typing import Literal
 
@@ -273,4 +274,43 @@ class DynamicThresholdingPost:
 
         m = model.clone()
         m.set_model_sampler_post_cfg_function(dynthresh_cfg)
+        return (m,)
+
+
+class RenormCFGPost:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "model": ("MODEL",),
+                "renorm_cfg": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step": 0.01}),
+                "sigma_start": ("FLOAT", {"default": -1.0, "min": -1.0, "max": 10000.0, "step": 0.01, "round": False}),
+                "sigma_end": ("FLOAT", {"default": -1.0, "min": -1.0, "max": 10000.0, "step": 0.01, "round": False}),
+            }
+        }
+
+    RETURN_TYPES = ("MODEL",)
+    FUNCTION = "patch"
+
+    CATEGORY = "model_patches/unet"
+
+    def patch(self, model: ModelPatcher, renorm_cfg: float, sigma_start: float, sigma_end: float):
+        def renorm_cfg_func(args):
+            x_cfg = args["denoised"]
+            cond = args["cond_denoised"]
+            sigma = args["sigma"]
+
+            if (
+                renorm_cfg == 0.0
+                or (sigma_start >= 0 and sigma[0] > sigma_start)
+                or (sigma_end >= 0 and sigma[0] <= sigma_end)
+            ):
+                return x_cfg
+
+            cond_norm = torch.linalg.vector_norm(cond, dim=(1, 2, 3), keepdim=True) * renorm_cfg
+            cfg_norm = torch.linalg.vector_norm(x_cfg, dim=(1, 2, 3), keepdim=True)
+            return x_cfg * (cond_norm / cfg_norm).clamp(max=1.0)
+
+        m = model.clone()
+        m.set_model_sampler_post_cfg_function(renorm_cfg_func)
         return (m,)

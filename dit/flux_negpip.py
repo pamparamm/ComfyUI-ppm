@@ -6,7 +6,7 @@ from comfy.ldm.flux.layers import DoubleStreamBlock, SingleStreamBlock, timestep
 from comfy.ldm.flux.math import attention
 
 
-def _flux_dsb_forward_negpip(
+def flux_dsb_forward_negpip(
     self: DoubleStreamBlock,
     img: Tensor,
     txt: Tensor,
@@ -38,12 +38,24 @@ def _flux_dsb_forward_negpip(
 
     if hasattr(self, "flipped_img_txt") and self.flipped_img_txt:
         # run actual attention
-        attn = attention(torch.cat((img_q, txt_q), dim=2), torch.cat((img_k, txt_k), dim=2), torch.cat((img_v, txt_v), dim=2), pe=pe, mask=attn_mask)
+        attn = attention(
+            torch.cat((img_q, txt_q), dim=2),
+            torch.cat((img_k, txt_k), dim=2),
+            torch.cat((img_v, txt_v), dim=2),
+            pe=pe,
+            mask=attn_mask,
+        )
 
         img_attn, txt_attn = attn[:, : img.shape[1]], attn[:, img.shape[1] :]
     else:
         # run actual attention
-        attn = attention(torch.cat((txt_q, img_q), dim=2), torch.cat((txt_k, img_k), dim=2), torch.cat((txt_v, img_v), dim=2), pe=pe, mask=attn_mask)
+        attn = attention(
+            torch.cat((txt_q, img_q), dim=2),
+            torch.cat((txt_k, img_k), dim=2),
+            torch.cat((txt_v, img_v), dim=2),
+            pe=pe,
+            mask=attn_mask,
+        )
 
         txt_attn, img_attn = attn[:, : txt.shape[1]], attn[:, txt.shape[1] :]
 
@@ -61,7 +73,7 @@ def _flux_dsb_forward_negpip(
     return img, txt
 
 
-def _flux_ssb_forward_negpip(
+def flux_ssb_forward_negpip(
     self: SingleStreamBlock,
     x: Tensor,
     vec: Tensor,
@@ -71,8 +83,11 @@ def _flux_ssb_forward_negpip(
     flipped_img_txt: bool = False,
 ) -> Tensor:
     mod, _ = self.modulation(vec)
-    x_mod = (1 + mod.scale) * self.pre_norm(x) + mod.shift
-    qkv, mlp = torch.split(self.linear1(x_mod), [3 * self.hidden_size, self.mlp_hidden_dim], dim=-1)
+    qkv, mlp = torch.split(
+        self.linear1((1 + mod.scale) * self.pre_norm(x) + mod.shift),
+        [3 * self.hidden_size, self.mlp_hidden_dim],
+        dim=-1,
+    )
 
     q, k, v = qkv.view(qkv.shape[0], qkv.shape[1], 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
 
@@ -94,7 +109,7 @@ def _flux_ssb_forward_negpip(
     return x
 
 
-def _flux_forward_orig_negpip(
+def flux_forward_orig_negpip(
     self: Flux,
     img: Tensor,
     img_ids: Tensor,
@@ -115,9 +130,8 @@ def _flux_forward_orig_negpip(
     img = self.img_in(img)
     vec = self.time_in(timestep_embedding(timesteps, 256).to(img.dtype))
     if self.params.guidance_embed:
-        if guidance is None:
-            raise ValueError("Didn't get guidance strength for guidance distilled model.")
-        vec = vec + self.guidance_in(timestep_embedding(guidance, 256).to(img.dtype))
+        if guidance is not None:
+            vec = vec + self.guidance_in(timestep_embedding(guidance, 256).to(img.dtype))
 
     vec = vec + self.vector_in(y[:, : self.params.vec_in_dim])
 
@@ -138,18 +152,39 @@ def _flux_forward_orig_negpip(
 
             def block_wrap(args):
                 out = {}
-                out["img"], out["txt"] = _flux_dsb_forward_negpip(
-                    block, img=args["img"], txt=args["txt"], vec=args["vec"], pe=args["pe"], attn_mask=args.get("attn_mask"), negpip_mask=negpip_mask
+                out["img"], out["txt"] = flux_dsb_forward_negpip(
+                    block,
+                    img=args["img"],
+                    txt=args["txt"],
+                    vec=args["vec"],
+                    pe=args["pe"],
+                    attn_mask=args.get("attn_mask"),
+                    negpip_mask=negpip_mask,
                 )
                 return out
 
             out = blocks_replace[("double_block", i)](
-                {"img": img, "txt": txt, "vec": vec, "pe": pe, "attn_mask": attn_mask}, {"original_block": block_wrap}
+                {
+                    "img": img,
+                    "txt": txt,
+                    "vec": vec,
+                    "pe": pe,
+                    "attn_mask": attn_mask,
+                },
+                {"original_block": block_wrap},
             )
             txt = out["txt"]
             img = out["img"]
         else:
-            img, txt = _flux_dsb_forward_negpip(block, img=img, txt=txt, vec=vec, pe=pe, attn_mask=attn_mask, negpip_mask=negpip_mask)
+            img, txt = flux_dsb_forward_negpip(
+                block,
+                img=img,
+                txt=txt,
+                vec=vec,
+                pe=pe,
+                attn_mask=attn_mask,
+                negpip_mask=negpip_mask,
+            )
 
         if control is not None:  # Controlnet
             control_i = control.get("input")
@@ -165,15 +200,37 @@ def _flux_forward_orig_negpip(
 
             def block_wrap(args):
                 out = {}
-                out["img"] = _flux_ssb_forward_negpip(
-                    block, args["img"], vec=args["vec"], pe=args["pe"], attn_mask=args.get("attn_mask"), negpip_mask=negpip_mask, flipped_img_txt=False
+                out["img"] = flux_ssb_forward_negpip(
+                    block,
+                    args["img"],
+                    vec=args["vec"],
+                    pe=args["pe"],
+                    attn_mask=args.get("attn_mask"),
+                    negpip_mask=negpip_mask,
+                    flipped_img_txt=False,
                 )
                 return out
 
-            out = blocks_replace[("single_block", i)]({"img": img, "vec": vec, "pe": pe, "attn_mask": attn_mask}, {"original_block": block_wrap})
+            out = blocks_replace[("single_block", i)](
+                {
+                    "img": img,
+                    "vec": vec,
+                    "pe": pe,
+                    "attn_mask": attn_mask,
+                },
+                {"original_block": block_wrap},
+            )
             img = out["img"]
         else:
-            img = _flux_ssb_forward_negpip(block, img, vec=vec, pe=pe, attn_mask=attn_mask, negpip_mask=negpip_mask, flipped_img_txt=False)
+            img = flux_ssb_forward_negpip(
+                block,
+                img,
+                vec=vec,
+                pe=pe,
+                attn_mask=attn_mask,
+                negpip_mask=negpip_mask,
+                flipped_img_txt=False,
+            )
 
         if control is not None:  # Controlnet
             control_o = control.get("output")
