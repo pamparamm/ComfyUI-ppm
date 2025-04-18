@@ -15,6 +15,7 @@ from ..dit.hunyuan_video_negpip import (
     hunyuan_video_forward_orig_negpip,
     hunyuan_video_clip_encode_token_weights_negpip,
 )
+from ..compat.advanced_encode import patch_adv_encode
 
 
 def has_negpip(model_options: dict):
@@ -116,6 +117,7 @@ class CLIPNegPip:
     def patch(self, model: ModelPatcher, clip: CLIP):
         m = model.clone()
         c = clip.clone()
+        patch_adv_encode()
 
         diffusion_model = type(m.model)
         is_clip_patched = False

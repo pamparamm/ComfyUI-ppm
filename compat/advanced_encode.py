@@ -1,7 +1,8 @@
-import importlib
 import torch
+from types import ModuleType
 from functools import partial
 from math import copysign
+from .module_locator import get_module_injector
 
 INITIALIZED = False
 
@@ -13,7 +14,6 @@ def from_zero(weights, base_emb):
 
 
 def _advanced_encode_from_tokens_negpip_wrapper(advanced_encode_from_tokens, from_zero):
-
     def advanced_encode_from_tokens_negpip(
         tokenized,
         token_normalization,
@@ -36,7 +36,9 @@ def _advanced_encode_from_tokens_negpip_wrapper(advanced_encode_from_tokens, fro
                 return False
             elif emb.shape[1] == length * 2:
                 return True
-            raise ValueError("Unknown tensor shape - perhaps you've applied NegPip node more than once")
+            raise ValueError(
+                f"Unknown embedding shape: expected {length} or {length * 2}, but found {emb.shape[1]}. Perhaps you've applied NegPip node more than once?"
+            )
 
         encoded_with_negpip = _encoded_with_negpip(encode_func, m_token, length)
 
@@ -73,35 +75,36 @@ def _advanced_encode_from_tokens_negpip_wrapper(advanced_encode_from_tokens, fro
     return advanced_encode_from_tokens_negpip
 
 
-def hijack_adv_encode():
+def patch_adv_encode():
     global INITIALIZED
 
-    def _hijack_ADV_CLIP_emb():
-        try:
-            import custom_nodes.ComfyUI_ADV_CLIP_emb.adv_encode as adv_encode
-            import ComfyUI_ADV_CLIP_emb.adv_encode as adv_encode_inner
+    def _patch_ADV_CLIP_emb():
+        injector = get_module_injector("ComfyUI_ADV_CLIP_emb")
 
+        def _patch(module: ModuleType):
+            adv_encode = module.adv_encode
             advanced_encode_from_tokens_negpip = _advanced_encode_from_tokens_negpip_wrapper(
                 adv_encode.advanced_encode_from_tokens, adv_encode.from_zero
             )
-
             adv_encode.advanced_encode_from_tokens = advanced_encode_from_tokens_negpip
-            adv_encode_inner.advanced_encode_from_tokens = advanced_encode_from_tokens_negpip
 
-        except ImportError:
-            pass
+        injector.patch(_patch)
 
-    def _hijack_prompt_control():
-        try:
-            adv_encode = importlib.import_module("custom_nodes.comfyui-prompt-control.prompt_control.adv_encode")
-            prompts = importlib.import_module("custom_nodes.comfyui-prompt-control.prompt_control.prompts")
-            prompts_inner = importlib.import_module("comfyui-prompt-control.prompt_control.prompts")
+    def _patch_prompt_control():
+        injector = get_module_injector("comfyui-prompt-control")
 
-            advanced_encode_from_tokens_negpip = _advanced_encode_from_tokens_negpip_wrapper(adv_encode.advanced_encode_from_tokens, from_zero)
+        def _patch(module: ModuleType):
+            adv_encode = module.prompt_control.adv_encode
+            prompts = module.prompt_control.prompts
+            advanced_encode_from_tokens_negpip = _advanced_encode_from_tokens_negpip_wrapper(
+                adv_encode.advanced_encode_from_tokens, from_zero
+            )
 
             def _make_patch_negpip(te_name, orig_fn, normalization, style, extra):
                 def encode(t):
-                    r = advanced_encode_from_tokens_negpip(t, normalization, style, orig_fn, return_pooled=True, apply_to_pooled=False, **extra)
+                    r = advanced_encode_from_tokens_negpip(
+                        t, normalization, style, orig_fn, return_pooled=True, apply_to_pooled=False, **extra
+                    )
                     return prompts.apply_weights(r, te_name, extra.get("clip_weights"))
 
                 if "cuts" in extra:
@@ -109,24 +112,13 @@ def hijack_adv_encode():
                 return encode
 
             prompts.make_patch = _make_patch_negpip
-            prompts_inner.make_patch = _make_patch_negpip
 
-        except ImportError:
-            pass
+        injector.patch(_patch)
 
     if not INITIALIZED:
-        import sys
-        import pathlib
-
-        custom_nodes = pathlib.Path(__file__).parent.parent.parent
-        assert custom_nodes.name == "custom_nodes"
-
-        sys.path.insert(0, str(custom_nodes))
-
         try:
-            _hijack_ADV_CLIP_emb()
-            _hijack_prompt_control()
+            _patch_ADV_CLIP_emb()
+            _patch_prompt_control()
 
         finally:
-            sys.path.pop(0)
             INITIALIZED = True

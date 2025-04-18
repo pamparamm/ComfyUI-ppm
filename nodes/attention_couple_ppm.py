@@ -1,6 +1,7 @@
 # Original implementation by laksjdjf, hako-mikan, Haoming02 licensed under GPL-3.0
 # https://github.com/laksjdjf/cgem156-ComfyUI/blob/1f5533f7f31345bafe4b833cbee15a3c4ad74167/scripts/attention_couple/node.py
 # https://github.com/Haoming02/sd-forge-couple/blob/e8e258e982a8d149ba59a4bc43b945467604311c/scripts/attention_couple.py
+from warnings import deprecated
 import torch
 import torch.nn.functional as F
 import math
@@ -15,6 +16,7 @@ UNCOND = 1
 
 
 # Naive and totally inaccurate way to factorize target_res into rescaled integer width/height
+@deprecated('Use "activations_shape" from `extra_options` instead')
 def rescale_size(
     width: int,
     height: int,
@@ -56,11 +58,15 @@ def rescale_size(
     raise ValueError(msg)
 
 
-def get_mask(mask, batch_size, num_tokens, original_shape):
-    image_width: int = original_shape[3]
-    image_height: int = original_shape[2]
-
-    size = rescale_size(image_width, image_height, num_tokens)
+def get_mask(mask, batch_size, num_tokens, extra_options):
+    if "activations_shape" in extra_options:
+        activations_shape = extra_options["activations_shape"]
+        size = (activations_shape[3], activations_shape[2])
+    else:
+        original_shape = extra_options["original_shape"]
+        image_width: int = original_shape[3]
+        image_height: int = original_shape[2]
+        size = rescale_size(image_width, image_height, num_tokens)
 
     num_conds = mask.shape[0]
     mask_downsample = F.interpolate(mask, size=size, mode="nearest")
@@ -182,7 +188,7 @@ class AttentionCouplePPM:
         def attn2_output_patch(out, extra_options):
             cond_or_uncond = extra_options["cond_or_uncond"]
             bs = self.batch_size
-            mask_downsample = get_mask(mask, self.batch_size, out.shape[1], extra_options["original_shape"])
+            mask_downsample = get_mask(mask, self.batch_size, out.shape[1], extra_options)
             outputs = []
             cond_outputs = []
             i_cond = 0

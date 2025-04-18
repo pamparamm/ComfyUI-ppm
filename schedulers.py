@@ -50,7 +50,8 @@ def _calculate_sigmas_hijack(model_sampling, scheduler_name, steps):
 
 def hijack_schedulers():
     if calculate_sigmas_original == _calculate_sigmas_hijack:
-        raise ValueError("Schedulers are already hijacked")
+        raise RuntimeError("Schedulers are already hijacked")
+
     SCHEDULER_NAMES.append(AYS_SCHEDULER)
     SCHEDULER_NAMES.append(AYS_PLUS_SCHEDULER)
     SCHEDULER_NAMES.append(AYS_30_SCHEDULER)

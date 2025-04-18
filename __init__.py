@@ -21,7 +21,6 @@ from .nodes.freeu_adv import FreeU2PPM
 from .nodes.misc import ConvertTimestepToSigma
 
 from .schedulers import hijack_schedulers
-from .compat.advanced_encode import hijack_adv_encode
 
 
 WEB_DIRECTORY = "./js"
@@ -78,5 +77,3 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 
 
 hijack_schedulers()
-
-hijack_adv_encode()
