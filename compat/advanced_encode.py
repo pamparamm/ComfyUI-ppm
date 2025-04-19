@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from types import ModuleType
 from functools import partial
 from math import copysign
@@ -75,6 +76,63 @@ def _advanced_encode_from_tokens_negpip_wrapper(advanced_encode_from_tokens, fro
     return advanced_encode_from_tokens_negpip
 
 
+def _encode_regions_negpip_wrapper(create_masked_prompt):
+    def encode_regions_negpip(clip_regions, encode, tokenizer):
+        base_weighted_tokens = clip_regions["base_tokens"]
+        start_from_masked = clip_regions["start_from_masked"]
+        mask_token = clip_regions["mask_token"]
+        strict_mask = clip_regions["strict_mask"]
+
+        # calc base embedding
+        base_embedding_full, pool = encode(base_weighted_tokens)
+
+        # Avoid numpy value error and passthrough base embeddings if no regions are set.
+
+        # calc global target mask
+        global_target_mask = np.any(np.stack(clip_regions["targets"]), axis=0).astype(int)
+
+        # calc global region mask
+        global_region_mask = np.any(np.stack(clip_regions["regions"]), axis=0).astype(float)
+        regions_sum = np.sum(np.stack(clip_regions["regions"]), axis=0)
+        regions_normalized = np.divide(1, regions_sum, out=np.zeros_like(regions_sum), where=regions_sum != 0)
+
+        # mask base embeddings
+        base_masked_prompt = create_masked_prompt(base_weighted_tokens, global_target_mask, mask_token)
+        base_embedding_masked, _ = encode(base_masked_prompt)
+        base_embedding_start = base_embedding_full * (1 - start_from_masked) + base_embedding_masked * start_from_masked
+        base_embedding_outer = base_embedding_full * (1 - strict_mask) + base_embedding_masked * strict_mask
+
+        region_embeddings = []
+        for region, target, weight in zip(clip_regions["regions"], clip_regions["targets"], clip_regions["weights"]):
+            region_masking = torch.tensor(
+                regions_normalized * region * weight, dtype=base_embedding_full.dtype, device=base_embedding_full.device
+            ).unsqueeze(-1)
+
+            region_prompt = create_masked_prompt(base_weighted_tokens, global_target_mask - target, mask_token)
+            region_emb, _ = encode(region_prompt)
+            region_emb -= base_embedding_start
+            if region_emb.shape[1] == 2 * region_masking.shape[1]:
+                region_masking = torch.repeat_interleave(region_masking, 2, dim=1)
+            region_emb *= region_masking
+
+            region_embeddings.append(region_emb)
+        region_embeddings = torch.stack(region_embeddings).sum(axis=0)
+
+        embeddings_final_mask = torch.tensor(
+            global_region_mask, dtype=base_embedding_full.dtype, device=base_embedding_full.device
+        ).unsqueeze(-1)
+        if region_embeddings.shape[1] == 2 * embeddings_final_mask.shape[1]:
+            embeddings_final_mask = torch.repeat_interleave(embeddings_final_mask, 2, dim=1)
+
+        embeddings_final = base_embedding_start * embeddings_final_mask + base_embedding_outer * (
+            1 - embeddings_final_mask
+        )
+        embeddings_final += region_embeddings
+        return embeddings_final, pool
+
+    return encode_regions_negpip
+
+
 def patch_adv_encode():
     global INITIALIZED
 
@@ -96,9 +154,11 @@ def patch_adv_encode():
         def _patch(module: ModuleType):
             adv_encode = module.prompt_control.adv_encode
             prompts = module.prompt_control.prompts
+            cutoff = module.prompt_control.cutoff
             advanced_encode_from_tokens_negpip = _advanced_encode_from_tokens_negpip_wrapper(
                 adv_encode.advanced_encode_from_tokens, from_zero
             )
+            encode_regions_negpip = _encode_regions_negpip_wrapper(cutoff.create_masked_prompt)
 
             def _make_patch_negpip(te_name, orig_fn, normalization, style, extra):
                 def encode(t):
@@ -112,6 +172,7 @@ def patch_adv_encode():
                 return encode
 
             prompts.make_patch = _make_patch_negpip
+            cutoff.encode_regions = encode_regions_negpip
 
         injector.patch(_patch)
 
