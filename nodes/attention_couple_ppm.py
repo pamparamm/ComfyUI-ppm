@@ -1,7 +1,6 @@
 # Original implementation by laksjdjf, hako-mikan, Haoming02 licensed under GPL-3.0
 # https://github.com/laksjdjf/cgem156-ComfyUI/blob/1f5533f7f31345bafe4b833cbee15a3c4ad74167/scripts/attention_couple/node.py
 # https://github.com/Haoming02/sd-forge-couple/blob/e8e258e982a8d149ba59a4bc43b945467604311c/scripts/attention_couple.py
-from warnings import deprecated
 import torch
 import torch.nn.functional as F
 import math
@@ -16,7 +15,6 @@ UNCOND = 1
 
 
 # Naive and totally inaccurate way to factorize target_res into rescaled integer width/height
-@deprecated('Use "activations_shape" from `extra_options` instead')
 def rescale_size(
     width: int,
     height: int,
