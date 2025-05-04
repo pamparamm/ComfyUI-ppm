@@ -1,12 +1,11 @@
-import logging
 import math
 from typing import Literal
-import torch
 
 import comfy.model_management
-from nodes import MAX_RESOLUTION
+import torch
+from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
 from comfy_extras.nodes_mask import MaskComposite
-
+from nodes import MAX_RESOLUTION
 
 MIN_RATIO = 0.15
 MAX_RATIO = 1 / MIN_RATIO
@@ -27,43 +26,43 @@ def _calc_dimensions(resolution: int, ratio: float, step: int):
     return width, height
 
 
-class EmptyLatentImageAR:
+class EmptyLatentImageAR(ComfyNodeABC):
     def __init__(self):
         self.device = comfy.model_management.intermediate_device()
 
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls) -> InputTypeDict:
         return {
             "required": {
-                "resolution": ("INT", {"default": 512, "min": 16, "max": MAX_RESOLUTION, "step": 8}),
-                "ratio": ("FLOAT", {"default": 1.0, "min": MIN_RATIO, "max": MAX_RATIO, "step": 0.001}),
-                "step": ("INT", {"default": 64, "min": 8, "max": 128, "step": 8}),
-                "batch_size": ("INT", {"default": 1, "min": 1, "max": 4096}),
+                "resolution": (IO.INT, {"default": 512, "min": 16, "max": MAX_RESOLUTION, "step": 8}),
+                "ratio": (IO.FLOAT, {"default": 1.0, "min": MIN_RATIO, "max": MAX_RATIO, "step": 0.001}),
+                "step": (IO.INT, {"default": 64, "min": 8, "max": 128, "step": 8}),
+                "batch_size": (IO.INT, {"default": 1, "min": 1, "max": 4096}),
             }
         }
 
-    RETURN_TYPES = ("LATENT",)
+    RETURN_TYPES = (IO.LATENT,)
     FUNCTION = "generate"
 
     CATEGORY = "latent"
 
-    def generate(self, resolution, ratio, step, batch_size=1):
+    def generate(self, resolution: int, ratio: float, step: int, batch_size=1):
         width, height = _calc_dimensions(resolution, ratio, step)
 
         latent = torch.zeros([batch_size, 4, height // 8, width // 8], device=self.device)
         return ({"samples": latent},)
 
 
-class LatentToWidthHeight:
+class LatentToWidthHeight(ComfyNodeABC):
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls) -> InputTypeDict:
         return {
             "required": {
-                "latent": ("LATENT",),
+                "latent": (IO.LATENT, {}),
             }
         }
 
-    RETURN_TYPES = ("INT", "INT")
+    RETURN_TYPES = (IO.INT, IO.INT)
     RETURN_NAMES = ("width", "height")
     FUNCTION = "convert"
 
@@ -80,24 +79,24 @@ class LatentToWidthHeight:
         return width, height
 
 
-class LatentToMaskBB:
+class LatentToMaskBB(ComfyNodeABC):
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls) -> InputTypeDict:
         return {
             "required": {
-                "latent": ("LATENT",),
-                "x": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01, "round": 0.001}),
-                "y": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01, "round": 0.001}),
-                "w": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01, "round": 0.001}),
-                "h": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01, "round": 0.001}),
-                "value": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01, "round": 0.001}),
+                "latent": (IO.LATENT, {}),
+                "x": (IO.FLOAT, {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01, "round": 0.001}),
+                "y": (IO.FLOAT, {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01, "round": 0.001}),
+                "w": (IO.FLOAT, {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01, "round": 0.001}),
+                "h": (IO.FLOAT, {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01, "round": 0.001}),
+                "value": (IO.FLOAT, {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01, "round": 0.001}),
             },
             "optional": {
-                "outer_value": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01, "round": 0.001}),
+                "outer_value": (IO.FLOAT, {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01, "round": 0.001}),
             },
         }
 
-    RETURN_TYPES = ("MASK",)
+    RETURN_TYPES = (IO.MASK,)
     FUNCTION = "get_bounding_box"
 
     CATEGORY = "mask"
@@ -130,17 +129,23 @@ class LatentToMaskBB:
         return (mask.unsqueeze(0),)
 
 
-class MaskCompositePPM:
+class MaskCompositePPM(ComfyNodeABC):
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls) -> InputTypeDict:
         return {
             "required": {
-                "mask_1": ("MASK",),
-                "operation": (["multiply", "add", "subtract", "and", "or", "xor"], {"default": "add"}),
+                "mask_1": (IO.MASK, {}),
+                "operation": (
+                    IO.COMBO,
+                    {
+                        "default": "add",
+                        "options": ["multiply", "add", "subtract", "and", "or", "xor"],
+                    },
+                ),
             },
         }
 
-    RETURN_TYPES = ("MASK",)
+    RETURN_TYPES = (IO.MASK,)
     FUNCTION = "combine"
 
     CATEGORY = "mask"

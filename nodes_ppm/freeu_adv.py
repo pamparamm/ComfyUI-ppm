@@ -1,12 +1,17 @@
 # modified (and partially simplified) version of https://github.com/WASasquatch/FreeU_Advanced (MIT License)
 # code originally taken from: https://github.com/ChenyangSi/FreeU (under MIT License)
 
+import logging
 from functools import partial
+
 import torch
 import torch as th
 import torch.fft as fft
-from comfy.ldm.modules.diffusionmodules.openaimodel import forward_timestep_embed, apply_control
+from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
+from comfy.ldm.modules.diffusionmodules.openaimodel import apply_control, forward_timestep_embed
 from comfy.ldm.modules.diffusionmodules.util import timestep_embedding
+from comfy.model_patcher import ModelPatcher
+from comfy.model_sampling import ModelSamplingDiscrete
 
 
 def _forward(_self, x, timesteps=None, context=None, y=None, control=None, transformer_options={}, **kwargs):
@@ -26,7 +31,9 @@ def _forward(_self, x, timesteps=None, context=None, y=None, control=None, trans
     image_only_indicator = kwargs.get("image_only_indicator", getattr(_self, "default_image_only_indicator", None))
     time_context = kwargs.get("time_context", None)
 
-    assert (y is not None) == (_self.num_classes is not None), "must specify y if and only if the model is class-conditional"
+    assert (y is not None) == (_self.num_classes is not None), (
+        "must specify y if and only if the model is class-conditional"
+    )
     hs = []
     t_emb = timestep_embedding(timesteps, _self.model_channels, repeat_only=False).to(x.dtype)
     emb = _self.time_embed(t_emb)
@@ -142,51 +149,51 @@ def Fourier_filter(x, threshold, scale):
     return x
 
 
-class FreeU2PPM:
+class FreeU2PPM(ComfyNodeABC):
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls) -> InputTypeDict:
         return {
             "required": {
-                "model": ("MODEL",),
-                "input_block": ("BOOLEAN", {"default": False}),
-                "middle_block": ("BOOLEAN", {"default": False}),
-                "output_block": ("BOOLEAN", {"default": False}),
-                "slice_b1": ("INT", {"default": 640, "min": 64, "max": 1280, "step": 1}),
-                "slice_b2": ("INT", {"default": 320, "min": 64, "max": 640, "step": 1}),
-                "b1": ("FLOAT", {"default": 1.1, "min": 0.0, "max": 10.0, "step": 0.001}),
-                "b2": ("FLOAT", {"default": 1.2, "min": 0.0, "max": 10.0, "step": 0.001}),
-                "s1": ("FLOAT", {"default": 0.9, "min": 0.0, "max": 10.0, "step": 0.001}),
-                "s2": ("FLOAT", {"default": 0.2, "min": 0.0, "max": 10.0, "step": 0.001}),
-                "start_percent": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01, "round": False}),
-                "end_percent": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01, "round": False}),
+                "model": (IO.MODEL, {}),
+                "input_block": (IO.BOOLEAN, {"default": False}),
+                "middle_block": (IO.BOOLEAN, {"default": False}),
+                "output_block": (IO.BOOLEAN, {"default": False}),
+                "slice_b1": (IO.INT, {"default": 640, "min": 64, "max": 1280, "step": 1}),
+                "slice_b2": (IO.INT, {"default": 320, "min": 64, "max": 640, "step": 1}),
+                "b1": (IO.FLOAT, {"default": 1.1, "min": 0.0, "max": 10.0, "step": 0.001}),
+                "b2": (IO.FLOAT, {"default": 1.2, "min": 0.0, "max": 10.0, "step": 0.001}),
+                "s1": (IO.FLOAT, {"default": 0.9, "min": 0.0, "max": 10.0, "step": 0.001}),
+                "s2": (IO.FLOAT, {"default": 0.2, "min": 0.0, "max": 10.0, "step": 0.001}),
+                "start_percent": (IO.FLOAT, {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01, "round": False}),
+                "end_percent": (IO.FLOAT, {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01, "round": False}),
             },
             "optional": {
-                "threshold": ("INT", {"default": 1.0, "max": 10, "min": 1, "step": 1}),
+                "threshold": (IO.INT, {"default": 1, "max": 10, "min": 1, "step": 1}),
             },
         }
 
-    RETURN_TYPES = ("MODEL",)
+    RETURN_TYPES = (IO.MODEL,)
     FUNCTION = "patch"
 
     CATEGORY = "_for_testing"
 
     def patch(
         self,
-        model,
-        input_block,
-        middle_block,
-        output_block,
-        slice_b1,
-        slice_b2,
-        b1,
-        b2,
-        s1,
-        s2,
-        threshold=1.0,
-        start_percent=0.0,
-        end_percent=1.0,
+        model: ModelPatcher,
+        input_block: bool,
+        middle_block: bool,
+        output_block: bool,
+        slice_b1: int,
+        slice_b2: int,
+        b1: float,
+        b2: float,
+        s1: float,
+        s2: float,
+        threshold: int = 1,
+        start_percent: float = 0.0,
+        end_percent: float = 1.0,
     ):
-        model_sampling = model.get_model_object("model_sampling")
+        model_sampling: ModelSamplingDiscrete = model.get_model_object("model_sampling")  # type: ignore
         sigma_start = model_sampling.percent_to_sigma(start_percent)
         sigma_end = model_sampling.percent_to_sigma(end_percent)
 
@@ -201,7 +208,9 @@ class FreeU2PPM:
             B = hidden_mean.shape[0]
             hidden_max, _ = torch.max(hidden_mean.view(B, -1), dim=-1, keepdim=True)
             hidden_min, _ = torch.min(hidden_mean.view(B, -1), dim=-1, keepdim=True)
-            hidden_mean = (hidden_mean - hidden_min.unsqueeze(2).unsqueeze(3)) / (hidden_max - hidden_min).unsqueeze(2).unsqueeze(3)
+            hidden_mean = (hidden_mean - hidden_min.unsqueeze(2).unsqueeze(3)) / (hidden_max - hidden_min).unsqueeze(
+                2
+            ).unsqueeze(3)
             return hidden_mean
 
         def block_patch(h, transformer_options):
@@ -233,12 +242,12 @@ class FreeU2PPM:
         m = model.clone()
         m.add_object_patch("diffusion_model.forward", partial(_forward, m.model.diffusion_model))
         if output_block:
-            print("Patching output block")
+            logging.debug("Patching output block")
             m.set_model_output_block_patch(block_patch_hsp)
         if input_block:
-            print("Patching input block")
+            logging.debug("Patching input block")
             m.set_model_input_block_patch(block_patch)
         if middle_block:
-            print("Patching middle block")
+            logging.debug("Patching middle block")
             m.set_model_patch(block_patch, "middle_block_patch")
         return (m,)

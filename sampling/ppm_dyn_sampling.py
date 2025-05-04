@@ -1,14 +1,13 @@
 # Modified samplers from Euler-Smea-Dyn-Sampler by Koishi-Star
-from tqdm.auto import trange
 import torch
+from comfy.k_diffusion.sampling import BrownianTreeNoiseSampler, default_noise_sampler, get_ancestral_step, to_d
+from tqdm.auto import trange
 
-from comfy.k_diffusion.sampling import to_d, default_noise_sampler, get_ancestral_step, BrownianTreeNoiseSampler
-
-SAMPLER_NAMES_DYN_ETA = [
+SAMPLER_NAMES_DYN_ETA: list = [
     "euler_ancestral_dy",
     "Kohaku_LoNyu_Yog",
 ]
-SAMPLER_NAMES_DYN = [
+SAMPLER_NAMES_DYN: list = [
     "euler_dy",
     "euler_smea_dy",
     "dpmpp_2m_dy",

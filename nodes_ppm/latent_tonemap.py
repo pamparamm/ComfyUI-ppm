@@ -1,25 +1,24 @@
 import torch
-from comfy.model_patcher import ModelPatcher
+from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
 
 
-class LatentOperationTonemapLuminance:
+class LatentOperationTonemapLuminance(ComfyNodeABC):
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls) -> InputTypeDict:
         return {
             "required": {
-                "model": ("MODEL",),
-                "tonemapper": (["reinhard", "mobius", "aces"], {"default": "mobius"}),
-                "multiplier": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step": 0.01}),
+                "tonemapper": (IO.COMBO, {"default": "mobius", "options": ["reinhard", "mobius", "aces"]}),
+                "multiplier": (IO.FLOAT, {"default": 1.0, "min": 0.0, "max": 100.0, "step": 0.01}),
             }
         }
 
-    RETURN_TYPES = ("LATENT_OPERATION",)
+    RETURN_TYPES = ("LATENT_OPERATION",)  # type: ignore
     FUNCTION = "op"
 
     CATEGORY = "latent/advanced/operations"
     EXPERIMENTAL = True
 
-    def op(self, model: ModelPatcher, tonemapper: str, multiplier: float):
+    def op(self, tonemapper: str, multiplier: float):
         def tonemap_reinhard_luminance(latent, **kwargs):
             lum = latent[:, 0:1]
 

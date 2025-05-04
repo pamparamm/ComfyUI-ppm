@@ -1,9 +1,11 @@
-from types import ModuleType
-from typing import Callable
-from nodes import get_module_name
-import folder_paths
+import logging
 import os
 import sys
+from types import ModuleType
+from typing import Callable
+
+import folder_paths
+from nodes import get_module_name
 
 
 class ModuleInjector:
@@ -14,6 +16,7 @@ class ModuleInjector:
         self.modules = modules
 
     def patch(self, patch_func: Callable[[ModuleType], None]):
+        logging.info(f"{self.name} was patched by ComfyUI-ppm")
         for module in self.modules:
             patch_func(module)
 

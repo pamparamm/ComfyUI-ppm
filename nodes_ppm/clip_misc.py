@@ -1,19 +1,28 @@
+import logging
+
+from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
 from comfy.sd import CLIP
-from nodes import ConditioningConcat, ConditioningCombine, ConditioningZeroOut, ConditioningSetTimestepRange, MAX_RESOLUTION
 from node_helpers import conditioning_set_values
+from nodes import (
+    MAX_RESOLUTION,
+    ConditioningCombine,
+    ConditioningConcat,
+    ConditioningSetTimestepRange,
+    ConditioningZeroOut,
+)
 
 
-class CLIPTextEncodeBREAK:
+class CLIPTextEncodeBREAK(ComfyNodeABC):
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls) -> InputTypeDict:
         return {
             "required": {
-                "text": ("STRING", {"multiline": True, "dynamicPrompts": True}),
-                "clip": ("CLIP",),
+                "text": (IO.STRING, {"multiline": True, "dynamicPrompts": True}),
+                "clip": (IO.CLIP, {}),
             }
         }
 
-    RETURN_TYPES = ("CONDITIONING",)
+    RETURN_TYPES = (IO.CONDITIONING,)
     FUNCTION = "encode"
 
     CATEGORY = "conditioning"
@@ -36,27 +45,29 @@ class CLIPTextEncodeBREAK:
         return (cond_concat,)
 
 
-class CLIPMicroConditioning:
+class CLIPMicroConditioning(ComfyNodeABC):
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls) -> InputTypeDict:
         return {
             "required": {
-                "cond": ("CONDITIONING",),
-                "width": ("INT", {"default": 1024.0, "min": 0, "max": MAX_RESOLUTION}),
-                "height": ("INT", {"default": 1024.0, "min": 0, "max": MAX_RESOLUTION}),
-                "crop_w": ("INT", {"default": 0, "min": 0, "max": MAX_RESOLUTION}),
-                "crop_h": ("INT", {"default": 0, "min": 0, "max": MAX_RESOLUTION}),
-                "target_width": ("INT", {"default": 1024.0, "min": 0, "max": MAX_RESOLUTION}),
-                "target_height": ("INT", {"default": 1024.0, "min": 0, "max": MAX_RESOLUTION}),
+                "cond": (IO.CONDITIONING, {}),
+                "width": (IO.INT, {"default": 1024.0, "min": 0, "max": MAX_RESOLUTION}),
+                "height": (IO.INT, {"default": 1024.0, "min": 0, "max": MAX_RESOLUTION}),
+                "crop_w": (IO.INT, {"default": 0, "min": 0, "max": MAX_RESOLUTION}),
+                "crop_h": (IO.INT, {"default": 0, "min": 0, "max": MAX_RESOLUTION}),
+                "target_width": (IO.INT, {"default": 1024.0, "min": 0, "max": MAX_RESOLUTION}),
+                "target_height": (IO.INT, {"default": 1024.0, "min": 0, "max": MAX_RESOLUTION}),
             }
         }
 
-    RETURN_TYPES = ("CONDITIONING",)
+    RETURN_TYPES = (IO.CONDITIONING,)
     FUNCTION = "micro_conditioning"
 
     CATEGORY = "advanced/conditioning"
 
-    def micro_conditioning(self, cond, width, height, crop_w, crop_h, target_width, target_height):
+    def micro_conditioning(
+        self, cond, width: int, height: int, crop_w: int, crop_h: int, target_width: int, target_height: int
+    ):
         c = conditioning_set_values(
             cond,
             {
@@ -71,23 +82,23 @@ class CLIPMicroConditioning:
         return (c,)
 
 
-class CLIPTokenCounter:
+class CLIPTokenCounter(ComfyNodeABC):
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls) -> InputTypeDict:
         return {
             "required": {
-                "text": ("STRING", {"multiline": True}),
-                "clip": ("CLIP",),
-                "debug_print": ("BOOLEAN", {"default": False}),
+                "text": (IO.STRING, {"multiline": True}),
+                "clip": (IO.CLIP, {}),
+                "debug_print": (IO.BOOLEAN, {"default": False}),
             }
         }
 
-    RETURN_TYPES = ("STRING",)
-    FUNCTION = "encode"
+    RETURN_TYPES = (IO.STRING,)
+    FUNCTION = "count"
 
     OUTPUT_NODE = True
 
-    def encode(self, clip: CLIP, text: str, debug_print: bool):
+    def count(self, clip: CLIP, text: str, debug_print: bool):
         lengths = []
         blocks = []
         special_tokens = set(clip.cond_stage_model.clip_l.special_tokens.values())
@@ -103,26 +114,26 @@ class CLIPTokenCounter:
         if len(blocks) > 0:
             lengths = [str(len(b)) for b in blocks]
             if debug_print:
-                print(f"Token count: {' + '.join(lengths)}")
-                print("--start--")
-                print(" + ".join(f"'{vocab[t[0]]}'" for b in blocks for t in b))
-                print("--finish--")
+                logging.info(f"Token count: {' + '.join(lengths)}")
+                logging.info("--start--")
+                logging.info(" + ".join(f"'{vocab[token[0]]}'" for block in blocks for token in block))
+                logging.info("--finish--")
         else:
             lengths = ["0"]
         return (lengths,)
 
 
-class ConditioningZeroOutCombine:
+class ConditioningZeroOutCombine(ComfyNodeABC):
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls) -> InputTypeDict:
         return {
             "required": {
-                "conditioning": ("CONDITIONING",),
-                "zero_out_end": ("FLOAT", {"default": 0.1, "min": 0.0, "max": 1.0, "step": 0.001}),
+                "conditioning": (IO.CONDITIONING, {}),
+                "zero_out_end": (IO.FLOAT, {"default": 0.1, "min": 0.0, "max": 1.0, "step": 0.001}),
             }
         }
 
-    RETURN_TYPES = ("CONDITIONING",)
+    RETURN_TYPES = (IO.CONDITIONING,)
     FUNCTION = "zero_out_combine"
 
     CATEGORY = "advanced/conditioning"

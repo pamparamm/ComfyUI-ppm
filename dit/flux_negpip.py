@@ -1,9 +1,8 @@
 import torch
-from torch import Tensor
-
-from comfy.ldm.flux.model import Flux
 from comfy.ldm.flux.layers import DoubleStreamBlock, SingleStreamBlock, timestep_embedding
 from comfy.ldm.flux.math import attention
+from comfy.ldm.flux.model import Flux
+from torch import Tensor
 
 
 def flux_dsb_forward_negpip(

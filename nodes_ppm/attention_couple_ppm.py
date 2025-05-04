@@ -1,11 +1,13 @@
 # Original implementation by laksjdjf, hako-mikan, Haoming02 licensed under GPL-3.0
 # https://github.com/laksjdjf/cgem156-ComfyUI/blob/1f5533f7f31345bafe4b833cbee15a3c4ad74167/scripts/attention_couple/node.py
 # https://github.com/Haoming02/sd-forge-couple/blob/e8e258e982a8d149ba59a4bc43b945467604311c/scripts/attention_couple.py
+import itertools
+import math
+
+import comfy.model_management
 import torch
 import torch.nn.functional as F
-import math
-import itertools
-import comfy.model_management
+from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
 from comfy.model_patcher import ModelPatcher
 
 from .clip_negpip import has_negpip
@@ -84,21 +86,21 @@ def lcm_for_list(numbers):
     return current_lcm
 
 
-class AttentionCouplePPM:
+class AttentionCouplePPM(ComfyNodeABC):
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls) -> InputTypeDict:
         return {
             "required": {
-                "model": ("MODEL",),
-                "base_mask": ("MASK",),
+                "model": (IO.MODEL, {}),
+                "base_mask": (IO.MASK, {}),
             },
             "optional": {
-                "cond_1": ("CONDITIONING",),
-                "mask_1": ("MASK",),
+                "cond_1": (IO.CONDITIONING, {}),
+                "mask_1": (IO.MASK, {}),
             },
         }
 
-    RETURN_TYPES = ("MODEL",)
+    RETURN_TYPES = (IO.MODEL,)
     FUNCTION = "patch"
 
     CATEGORY = "advanced/model"

@@ -1,24 +1,26 @@
+from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
 from comfy.k_diffusion import sampling as k_diffusion_sampling
 from comfy.model_patcher import ModelPatcher
 from comfy.samplers import KSAMPLER
-from ..sampling import ppm_dyn_sampling, ppm_cfgpp_sampling, ppm_cfgpp_dyn_sampling, ppm_sampling
 
-CFGPP_SAMPLER_NAMES_COMFY_ETA = [
+from ..sampling import ppm_cfgpp_dyn_sampling, ppm_cfgpp_sampling, ppm_dyn_sampling, ppm_sampling
+
+CFGPP_SAMPLER_NAMES_COMFY_ETA: list = [
     "euler_ancestral_cfg_pp",
 ]
-CFGPP_SAMPLER_NAMES_COMFY = [
+CFGPP_SAMPLER_NAMES_COMFY: list = [
     "euler_cfg_pp",
     "dpmpp_2m_cfg_pp",
     *CFGPP_SAMPLER_NAMES_COMFY_ETA,
 ]
 
 
-CFGPP_SAMPLER_NAMES = [
+CFGPP_SAMPLER_NAMES: list = [
     *CFGPP_SAMPLER_NAMES_COMFY,
     *ppm_cfgpp_sampling.CFGPP_SAMPLER_NAMES_KD,
     *ppm_cfgpp_dyn_sampling.CFGPP_SAMPLER_NAMES_DYN,
 ]
-SAMPLER_NAMES_ETA = [
+SAMPLER_NAMES_ETA: list = [
     *CFGPP_SAMPLER_NAMES_COMFY_ETA,
     *ppm_cfgpp_sampling.CFGPP_SAMPLER_NAMES_KD_ETA,
     *ppm_cfgpp_dyn_sampling.CFGPP_SAMPLER_NAMES_DYN_ETA,
@@ -26,24 +28,24 @@ SAMPLER_NAMES_ETA = [
 ]
 
 
-class DynSamplerSelect:
+class DynSamplerSelect(ComfyNodeABC):
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls) -> InputTypeDict:
         return {
             "required": {
-                "sampler_name": (ppm_dyn_sampling.SAMPLER_NAMES_DYN,),
-                "eta": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step": 0.01, "round": False}),
-                "s_dy_pow": ("INT", {"default": 2, "min": -1, "max": 100}),
-                "s_extra_steps": ("BOOLEAN", {"default": False}),
+                "sampler_name": (IO.COMBO, {"options": ppm_dyn_sampling.SAMPLER_NAMES_DYN}),
+                "eta": (IO.FLOAT, {"default": 1.0, "min": 0.0, "max": 100.0, "step": 0.01, "round": False}),
+                "s_dy_pow": (IO.INT, {"default": 2, "min": -1, "max": 100}),
+                "s_extra_steps": (IO.BOOLEAN, {"default": False}),
             }
         }
 
-    RETURN_TYPES = ("SAMPLER",)
+    RETURN_TYPES = (IO.SAMPLER,)
     CATEGORY = "sampling/custom_sampling/samplers"
 
     FUNCTION = "get_sampler"
 
-    def get_sampler(self, sampler_name, eta=1.0, s_dy_pow=-1, s_extra_steps=False):
+    def get_sampler(self, sampler_name: str, eta=1.0, s_dy_pow=-1, s_extra_steps=False):
         sampler_func = getattr(ppm_dyn_sampling, "sample_{}".format(sampler_name))
         extra_options = {}
         if sampler_name in SAMPLER_NAMES_ETA:
@@ -55,20 +57,20 @@ class DynSamplerSelect:
 
 
 # More CFG++ samplers based on https://github.com/comfyanonymous/ComfyUI/pull/3871 by yoinked-h
-class CFGPPSamplerSelect:
+class CFGPPSamplerSelect(ComfyNodeABC):
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls) -> InputTypeDict:
         return {
             "required": {
-                "sampler_name": (CFGPP_SAMPLER_NAMES,),
-                "eta": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step": 0.01, "round": False}),
-                "s_gamma_start": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 10000.0, "step": 0.01, "round": False}),
-                "s_gamma_end": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10000.0, "step": 0.01, "round": False}),
-                "s_extra_steps": ("BOOLEAN", {"default": False}),
+                "sampler_name": (IO.COMBO, {"options": CFGPP_SAMPLER_NAMES}),
+                "eta": (IO.FLOAT, {"default": 1.0, "min": 0.0, "max": 100.0, "step": 0.01, "round": False}),
+                "s_gamma_start": (IO.FLOAT, {"default": 0.0, "min": 0.0, "max": 10000.0, "step": 0.01, "round": False}),
+                "s_gamma_end": (IO.FLOAT, {"default": 1.0, "min": 0.0, "max": 10000.0, "step": 0.01, "round": False}),
+                "s_extra_steps": (IO.BOOLEAN, {"default": False}),
             }
         }
 
-    RETURN_TYPES = ("SAMPLER",)
+    RETURN_TYPES = (IO.SAMPLER,)
     CATEGORY = "sampling/custom_sampling/samplers"
 
     FUNCTION = "get_sampler"
@@ -96,24 +98,24 @@ class CFGPPSamplerSelect:
         raise ValueError(f"Unknown sampler_name {sampler_name}")
 
 
-class PPMSamplerSelect:
+class PPMSamplerSelect(ComfyNodeABC):
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls) -> InputTypeDict:
         return {
             "required": {
-                "sampler_name": (ppm_sampling.SAMPLER_NAMES,),
-                "model": ("MODEL",),
-                "cfg_pp": ("BOOLEAN", {"default": False}),
-                "s_sigma_diff": ("FLOAT", {"default": 2.0, "min": 0.0, "max": 10000.0, "step": 0.01, "round": False}),
+                "sampler_name": (IO.COMBO, {"options": ppm_sampling.SAMPLER_NAMES}),
+                "model": (IO.MODEL, {}),
+                "cfg_pp": (IO.BOOLEAN, {"default": False}),
+                "s_sigma_diff": (IO.FLOAT, {"default": 2.0, "min": 0.0, "max": 10000.0, "step": 0.01, "round": False}),
             }
         }
 
-    RETURN_TYPES = ("SAMPLER",)
+    RETURN_TYPES = (IO.SAMPLER,)
     CATEGORY = "sampling/custom_sampling/samplers"
 
     FUNCTION = "get_sampler"
 
-    def get_sampler(self, sampler_name, model: ModelPatcher, cfg_pp=False, s_sigma_diff=2.0):
+    def get_sampler(self, sampler_name: str, model: ModelPatcher, cfg_pp=False, s_sigma_diff=2.0):
         sampler_func = getattr(ppm_sampling, "sample_{}".format(sampler_name))
         ms = model.get_model_object("model_sampling")
         extra_options = {}

@@ -1,26 +1,25 @@
 import torch
+from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
 from comfy.model_base import ModelSamplingDiscrete
 from comfy.model_patcher import ModelPatcher
 
 
-class ConvertTimestepToSigma:
-    MODES = ["none", "percent", "schedule_step"]
-
+class ConvertTimestepToSigma(ComfyNodeABC):
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls) -> InputTypeDict:
         return {
             "required": {
-                "model": ("MODEL",),
-                "mode": (s.MODES, {"default": "percent"}),
+                "model": (IO.MODEL, {}),
+                "mode": (IO.COMBO, {"default": "percent", "options": ["none", "percent", "schedule_step"]}),
             },
             "optional": {
-                "percent": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}),
-                "schedule_sigmas": ("SIGMAS",),
-                "schedule_step": ("INT", {"default": 0, "min": 0, "max": 999}),
+                "percent": (IO.FLOAT, {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}),
+                "schedule_sigmas": (IO.SIGMAS, {}),
+                "schedule_step": (IO.INT, {"default": 0, "min": 0, "max": 999}),
             },
         }
 
-    RETURN_TYPES = ("FLOAT",)
+    RETURN_TYPES = (IO.FLOAT,)
     FUNCTION = "convert"
     CATEGORY = "sampling/custom_sampling/sigmas"
 

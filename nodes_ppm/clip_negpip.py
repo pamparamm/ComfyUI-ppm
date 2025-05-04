@@ -2,20 +2,21 @@
 # https://github.com/laksjdjf/cd-tuner_negpip-ComfyUI/blob/938b838546cf774dc8841000996552cef52cccf3/negpip.py#L43-L84
 # https://github.com/hako-mikan/sd-webui-negpip
 from functools import partial
+
 import torch
-
 from comfy import model_management
+from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
+from comfy.model_base import Flux, HunyuanVideo
 from comfy.model_patcher import ModelPatcher
-from comfy.model_base import Flux, HunyuanVideo, HunyuanVideoI2V
 from comfy.sd import CLIP
-from comfy.sd1_clip import gen_empty_tokens, SDClipModel
+from comfy.sd1_clip import SDClipModel, gen_empty_tokens
 
+from ..compat.advanced_encode import patch_adv_encode
 from ..dit.flux_negpip import flux_forward_orig_negpip
 from ..dit.hunyuan_video_negpip import (
-    hunyuan_video_forward_orig_negpip,
     hunyuan_video_clip_encode_token_weights_negpip,
+    hunyuan_video_forward_orig_negpip,
 )
-from ..compat.advanced_encode import patch_adv_encode
 
 
 def has_negpip(model_options: dict):
@@ -99,17 +100,17 @@ def encode_token_weights_negpip(self: SDClipModel, token_weight_pairs):
     return r
 
 
-class CLIPNegPip:
+class CLIPNegPip(ComfyNodeABC):
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls) -> InputTypeDict:
         return {
             "required": {
-                "model": ("MODEL",),
-                "clip": ("CLIP",),
+                "model": (IO.MODEL, {}),
+                "clip": (IO.CLIP, {}),
             }
         }
 
-    RETURN_TYPES = ("MODEL", "CLIP")
+    RETURN_TYPES = (IO.MODEL, IO.CLIP)
     FUNCTION = "patch"
 
     CATEGORY = "conditioning"

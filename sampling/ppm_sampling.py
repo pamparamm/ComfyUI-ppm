@@ -1,11 +1,9 @@
-from tqdm.auto import trange
-import torch
-
-from comfy.k_diffusion.sampling import to_d
 import comfy.model_patcher
+import torch
+from comfy.k_diffusion.sampling import to_d
+from tqdm.auto import trange
 
-
-SAMPLER_NAMES = [
+SAMPLER_NAMES: list = [
     "euler_gamma",
     "dpmpp_2m_gamma",
 ]

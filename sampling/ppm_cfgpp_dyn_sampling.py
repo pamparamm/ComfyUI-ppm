@@ -1,15 +1,15 @@
 # Modified samplers from Euler-Smea-Dyn-Sampler by Koishi-Star
-from tqdm.auto import trange
+import comfy.model_patcher
 import torch
+from comfy.k_diffusion.sampling import default_noise_sampler, get_ancestral_step, to_d
+from tqdm.auto import trange
 
 from .ppm_dyn_sampling import Rescaler
-from comfy.k_diffusion.sampling import to_d, default_noise_sampler, get_ancestral_step
-import comfy.model_patcher
 
-CFGPP_SAMPLER_NAMES_DYN_ETA = [
+CFGPP_SAMPLER_NAMES_DYN_ETA: list = [
     "euler_ancestral_dy_cfg_pp",
 ]
-CFGPP_SAMPLER_NAMES_DYN = [
+CFGPP_SAMPLER_NAMES_DYN: list = [
     "euler_dy_cfg_pp",
     "euler_smea_dy_cfg_pp",
     "dpmpp_2m_dy_cfg_pp",

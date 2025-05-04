@@ -1,9 +1,11 @@
-import torch
-import numpy as np
-from types import ModuleType
 from functools import partial
 from math import copysign
-from .module_locator import get_module_injector
+from types import ModuleType
+
+import numpy as np
+import torch
+
+from .module_injector import get_module_injector
 
 INITIALIZED = False
 

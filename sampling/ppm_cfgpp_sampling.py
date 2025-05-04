@@ -1,10 +1,9 @@
+import comfy.model_patcher
 import torch
+from comfy.k_diffusion.sampling import BrownianTreeNoiseSampler, default_noise_sampler, get_ancestral_step, to_d
 from tqdm import trange
 
-import comfy.model_patcher
-from comfy.k_diffusion.sampling import BrownianTreeNoiseSampler, default_noise_sampler, get_ancestral_step, to_d
-
-CFGPP_SAMPLER_NAMES_KD_ETA = [
+CFGPP_SAMPLER_NAMES_KD_ETA: list = [
     "dpmpp_2m_sde_cfg_pp",
     "dpmpp_2m_sde_gpu_cfg_pp",
     "dpmpp_3m_sde_cfg_pp",
@@ -12,7 +11,7 @@ CFGPP_SAMPLER_NAMES_KD_ETA = [
     "dpmpp_2s_ancestral_cfg_pp",
 ]
 
-CFGPP_SAMPLER_NAMES_KD = [
+CFGPP_SAMPLER_NAMES_KD: list = [
     *CFGPP_SAMPLER_NAMES_KD_ETA,
 ]
 
@@ -31,11 +30,12 @@ def sample_dpmpp_2m_sde_cfg_pp(model, x, sigmas, extra_args=None, callback=None,
     noise_sampler = BrownianTreeNoiseSampler(x, sigma_min, sigma_max, seed=seed, cpu=True) if noise_sampler is None else noise_sampler
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
+    sigma_fn = lambda t: t.neg().exp()
+    t_fn = lambda sigma: sigma.log().neg()
 
     old_denoised = None
     uncond_denoised = None
     h_last = None
-    h = None
 
     def post_cfg_function(args):
         nonlocal uncond_denoised
@@ -53,25 +53,22 @@ def sample_dpmpp_2m_sde_cfg_pp(model, x, sigmas, extra_args=None, callback=None,
             # Denoising step
             x = denoised
         else:
-            # DPM-Solver++(2M) SDE
-            t, s = -sigmas[i].log(), -sigmas[i + 1].log()
+            t, s = t_fn(sigmas[i]), t_fn(sigmas[i + 1])
             h = s - t
             eta_h = eta * h
+            b = (-h - eta_h).expm1().neg()
 
-            x = sigmas[i + 1] / sigmas[i] * (-eta_h).exp() * (x + (denoised - uncond_denoised)) + (-h - eta_h).expm1().neg() * denoised
+            x = sigmas[i + 1] / sigmas[i] * sigma_fn(eta_h) * x + b * uncond_denoised
 
             if old_denoised is not None:
                 r = h_last / h
-                if solver_type == 'heun':
-                    x = x + ((-h - eta_h).expm1().neg() / (-h - eta_h) + 1) * (1 / r) * (denoised - old_denoised)
-                elif solver_type == 'midpoint':
-                    x = x + 0.5 * (-h - eta_h).expm1().neg() * (1 / r) * (denoised - old_denoised)
+                x = x + b * (denoised - old_denoised) / (2 * r)
 
             if eta:
                 x = x + noise_sampler(sigmas[i], sigmas[i + 1]) * sigmas[i + 1] * (-2 * eta_h).expm1().neg().sqrt() * s_noise
 
-        old_denoised = denoised
-        h_last = h
+            h_last = h
+            old_denoised = uncond_denoised
     return x
 
 
