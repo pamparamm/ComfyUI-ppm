@@ -1,7 +1,8 @@
-import logging
+import re
 
 from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
 from comfy.sd import CLIP
+from comfy.sd1_clip import SDTokenizer
 from node_helpers import conditioning_set_values
 from nodes import (
     MAX_RESOLUTION,
@@ -12,13 +13,31 @@ from nodes import (
 )
 
 
+def get_special_tokens_map(clip: CLIP) -> dict[str, set[int]]:
+    tokenizers: list[SDTokenizer] = [t for t in clip.tokenizer.__dict__.values() if isinstance(t, SDTokenizer)]
+    special_tokens_map: dict[str, set[int]] = dict(
+        (
+            tokenizer.embedding_key.replace("clip_", ""),
+            set(
+                [
+                    token
+                    for token in [tokenizer.start_token, tokenizer.end_token, tokenizer.pad_token]
+                    if isinstance(token, int)
+                ]
+            ),
+        )
+        for tokenizer in tokenizers
+    )
+    return special_tokens_map
+
+
 class CLIPTextEncodeBREAK(ComfyNodeABC):
     @classmethod
     def INPUT_TYPES(cls) -> InputTypeDict:
         return {
             "required": {
-                "text": (IO.STRING, {"multiline": True, "dynamicPrompts": True}),
                 "clip": (IO.CLIP, {}),
+                "text": (IO.STRING, {"multiline": True, "dynamicPrompts": True}),
             }
         }
 
@@ -87,9 +106,8 @@ class CLIPTokenCounter(ComfyNodeABC):
     def INPUT_TYPES(cls) -> InputTypeDict:
         return {
             "required": {
-                "text": (IO.STRING, {"multiline": True}),
                 "clip": (IO.CLIP, {}),
-                "debug_print": (IO.BOOLEAN, {"default": False}),
+                "text": (IO.STRING, {"multiline": True}),
             }
         }
 
@@ -98,29 +116,37 @@ class CLIPTokenCounter(ComfyNodeABC):
 
     OUTPUT_NODE = True
 
-    def count(self, clip: CLIP, text: str, debug_print: bool):
-        lengths = []
-        blocks = []
-        special_tokens = set(clip.cond_stage_model.clip_l.special_tokens.values())
-        vocab = clip.tokenizer.clip_l.inv_vocab
-        prompts = text.split("BREAK")
+    def count(self, clip: CLIP, text: str):
+        special_tokens_map: dict[str, set[int]] = get_special_tokens_map(clip)
+        tokens_map: dict[str, list[list[int]]] = dict((key, []) for key in special_tokens_map.keys())
+
+        prompts = self._parse_prompts(text)
         for prompt in prompts:
             if len(prompt) > 0:
-                tokens_pure = clip.tokenize(prompt)
-                tokens_concat = sum(tokens_pure["l"], [])
-                block = [t for t in tokens_concat if t[0] not in special_tokens]
-                blocks.append(block)
+                tokenizer_results: dict[str, list] = clip.tokenize(prompt)
+                for key, tokens in [
+                    (key, tokens[0]) for key, tokens in tokenizer_results.items() if key in special_tokens_map
+                ]:
+                    prompt_tokens = [t for t in tokens if t[0] not in special_tokens_map[key]]
+                    tokens_map[key].append(prompt_tokens)
 
-        if len(blocks) > 0:
-            lengths = [str(len(b)) for b in blocks]
-            if debug_print:
-                logging.info(f"Token count: {' + '.join(lengths)}")
-                logging.info("--start--")
-                logging.info(" + ".join(f"'{vocab[token[0]]}'" for block in blocks for token in block))
-                logging.info("--finish--")
-        else:
-            lengths = ["0"]
+        lengths = self._get_lengths(tokens_map)
         return (lengths,)
+
+    @staticmethod
+    def _get_lengths(tokens_map: dict[str, list[list[int]]]) -> dict[str, list[int]]:
+        lengths: dict[str, list[int]] = {}
+        for key, prompt_tokens in tokens_map.items():
+            lengths[key] = [len(t) for t in prompt_tokens]
+        return lengths
+
+    @staticmethod
+    # TODO Rewrite into more robust function
+    def _parse_prompts(text: str) -> list[str]:
+        text = re.sub(r"STYLE\(.*?\)", "", text)  # sanitize prompt_control STYLE(*)
+        text = re.sub(r"\[(.*?)(\:.*?)+\]", r"\g<1>", text)  # replace prompt_control brackets
+        prompts = text.split("BREAK")  # split text by BREAK keyword
+        return prompts
 
 
 class ConditioningZeroOutCombine(ComfyNodeABC):
@@ -148,3 +174,49 @@ class ConditioningZeroOutCombine(ComfyNodeABC):
         c = timestep_node.set_range(conditioning, zero_out_end, 1.0)[0]
         c_combined = combine_node.combine(c, c_zero)
         return c_combined
+
+
+class CLIPTextEncodeInvertWeights(ComfyNodeABC):
+    @classmethod
+    def INPUT_TYPES(cls) -> InputTypeDict:
+        return {
+            "required": {
+                "clip": (IO.CLIP, {}),
+                "text": (IO.STRING, {"multiline": True, "dynamicPrompts": True}),
+                "invert_special_tokens": (IO.BOOLEAN, {"default": False}),
+            }
+        }
+
+    RETURN_TYPES = (IO.CONDITIONING,)
+    FUNCTION = "encode"
+
+    CATEGORY = "conditioning"
+
+    SEPARATOR = "BREAK"
+
+    def encode(self, clip: CLIP, text: str, invert_special_tokens: bool):
+        concat_node = ConditioningConcat()
+        special_tokens_map = get_special_tokens_map(clip)
+        chunks = text.split(self.SEPARATOR)
+
+        cond_concat = None
+        for chunk in chunks:
+            chunk = chunk.strip()
+            tokens: dict[str, list[list[tuple[int, float]]]] = clip.tokenize(chunk)
+            tokens_inverted: dict[str, list[list[tuple[int, float]]]] = {}
+            for clip_name, sections in tokens.items():
+                special_tokens = special_tokens_map.get(clip_name, set())
+                tokens_inverted[clip_name] = []
+                for section in sections:
+                    tokens_inverted[clip_name].append(
+                        [
+                            (token, weight if token in special_tokens and not invert_special_tokens else -weight)
+                            for token, weight in section
+                        ]
+                    )
+
+            cond, pooled = clip.encode_from_tokens(tokens_inverted, return_pooled=True)
+            conditioning = [[cond, {"pooled_output": pooled}]]
+            cond_concat = concat_node.concat(cond_concat, conditioning)[0] if cond_concat else conditioning
+
+        return (cond_concat,)

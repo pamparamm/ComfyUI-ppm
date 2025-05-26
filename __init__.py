@@ -4,6 +4,7 @@ from .nodes_ppm.clip_misc import (
     CLIPTextEncodeBREAK,
     CLIPTokenCounter,
     ConditioningZeroOutCombine,
+    CLIPTextEncodeInvertWeights,
 )
 from .nodes_ppm.clip_negpip import CLIPNegPip
 from .nodes_ppm.freeu_adv import FreeU2PPM
@@ -38,6 +39,7 @@ NODE_CLASS_MAPPINGS = {
     "CLIPMicroConditioning": CLIPMicroConditioning,
     "CLIPTokenCounter": CLIPTokenCounter,
     "ConditioningZeroOutCombine": ConditioningZeroOutCombine,
+    "CLIPTextEncodeInvertWeights": CLIPTextEncodeInvertWeights,
     "CLIPNegPip": CLIPNegPip,
     "AttentionCouplePPM": AttentionCouplePPM,
     "Guidance Limiter": GuidanceLimiter,
@@ -63,6 +65,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CLIPMicroConditioning": "CLIPMicroConditioning",
     "CLIPTokenCounter": "CLIPTokenCounter",
     "ConditioningZeroOutCombine": "ConditioningZeroOut (Combine)",
+    "CLIPTextEncodeInvertWeights": "CLIP Text Encode (Invert Weights)",
     "CLIPNegPip": "CLIP NegPip",
     "AttentionCouplePPM": "Attention Couple (PPM)",
     "Guidance Limiter": "Guidance Limiter",
