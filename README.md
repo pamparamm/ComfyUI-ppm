@@ -2,7 +2,7 @@
 
 Just a bunch of some random nodes modified/fixed/created by me and/or others. If any node starts throwing errors after an update - try to delete and re-add the node.
 
-You can browse example workflows inside ComfyUI's "Browse Templates/Custom Nodes/ComfyUi-ppm" menu. I'll probably add some more examples in future (but I'm kinda lazy, kek).
+You can browse example workflows for FLUX and SDXL NoobAI inside ComfyUI's "Browse Templates/Custom Nodes/ComfyUi-ppm" menu. I'll probably add some more examples in future (but I'm kinda lazy, kek).
 
 ## Nodes
 
@@ -40,6 +40,8 @@ Modified implementation of AttentionCouple by [laksjdjf](https://github.com/laks
 Inputs for new regions are managed automatically: when you attach cond/mask of a region to the node, a new `cond_` / `mask_` input appears.
 
 You can use multiple `LatentToMaskBB` nodes to set bounding boxes for `AttentionCouplePPM`. The parameters are relative to your initial latent: `x=0.5, y=0.0, w=0.5, h=1.0` will produce a mask covering the right half of the image.
+
+You can also attach `ConditioningSetAreaStrength` node just before `cond_` input to increase/decrease conditioning strength.
 
 ### DynSamplerSelect
 
@@ -79,7 +81,7 @@ A small lightweight wrapper over `ConditioningConcat` node. It splits prompts in
 
 ### CLIPTokenCounter
 
-Counts tokens in your prompt and returns them as a string (currently limited to clip_l). You can also print token count + individual tokens by enabling `debug_print`.
+Counts tokens in your prompt and returns them as a string. You can use `Preview Any` node to display them.
 
 ## Hooks/Hijacks
 

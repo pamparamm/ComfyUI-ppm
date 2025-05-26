@@ -1,4 +1,4 @@
-import { app } from "/scripts/app.js";
+import { app } from "../../scripts/app.js";
 
 app.registerExtension({
     name: "AttentionCouplePPM",
@@ -11,20 +11,20 @@ app.registerExtension({
                 const base_mask_name = "base_mask";
 
                 const conds = this.inputs
-                    .filter(input => input.name.startsWith(cond_input_name));
+                    ?.filter(input => input.name.startsWith(cond_input_name));
                 const masks = this.inputs
-                    .filter(input => input.name.startsWith(mask_input_name));
+                    ?.filter(input => input.name.startsWith(mask_input_name));
                 const base_mask = this.inputs
-                    .filter(input => input.name.startsWith(base_mask_name))[0];
+                    ?.filter(input => input.name.startsWith(base_mask_name))[0];
 
                 // Remove last unused inputs (skipping cond_1 and mask_1)
                 while (
                     (conds.length > 0 && masks.length > 0)
                     && (conds.at(-1).link == null && masks.at(-1).link == null)
                 ) {
-                    conds.pop();
-                    this.removeInput(this.inputs.length - 1);
                     masks.pop();
+                    this.removeInput(this.inputs.length - 1);
+                    conds.pop();
                     this.removeInput(this.inputs.length - 1);
                 }
 

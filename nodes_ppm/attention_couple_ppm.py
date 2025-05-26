@@ -49,24 +49,26 @@ class AttentionCouplePPM(ComfyNodeABC):
 
     CATEGORY = "advanced/model"
 
-    COND_UNCOND_COUPLE = "cond_or_uncond_couple"
+    COND_UNCOND_COUPLE_OPTION = "cond_or_uncond_couple"
+    BATCH_SIZE_OPTION = "batch_size_couple"
 
-    def patch(self, model: ModelPatcher, base_mask, **kwargs: dict):
-        self.batch_size = 0
-
+    def patch(self, model: ModelPatcher, base_mask, **kwargs):
         m = model.clone()
         dtype = m.model.diffusion_model.dtype
         device = comfy.model_management.get_torch_device()
 
         num_conds = len(kwargs) // 2 + 1
+        cond_inputs: list[list[list]] = [kwargs[f"cond_{i}"] for i in range(1, num_conds)]
+        mask_inputs: list[torch.Tensor] = [kwargs[f"mask_{i}"] for i in range(1, num_conds)]
 
-        mask = [base_mask] + [kwargs[f"mask_{i}"] for i in range(1, num_conds)]
+        mask = [base_mask] + mask_inputs
         mask = torch.stack(mask, dim=0).to(device, dtype=dtype)
         if mask.sum(dim=0).min() <= 0:
             raise ValueError("Masks contain non-filled areas")
         mask = mask / mask.sum(dim=0, keepdim=True)
 
-        conds: list[torch.Tensor] = [kwargs[f"cond_{i}"][0][0].to(device, dtype=dtype) for i in range(1, num_conds)]
+        conds: list[torch.Tensor] = [cond[0][0].to(device, dtype=dtype) for cond in cond_inputs]
+        strengths: list[float] = [cond[0][1].get("strength", 1.0) for cond in cond_inputs]
 
         conds_kv = (
             [(cond[:, 0::2], cond[:, 1::2]) for cond in conds]
@@ -79,9 +81,11 @@ class AttentionCouplePPM(ComfyNodeABC):
 
         def attn2_patch(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, extra_options):
             cond_or_uncond = extra_options["cond_or_uncond"]
+            cond_or_uncond_couple = extra_options[self.COND_UNCOND_COUPLE_OPTION] = list(cond_or_uncond)
 
             num_chunks = len(cond_or_uncond)
-            self.batch_size = q.shape[0] // num_chunks
+            bs = extra_options[self.BATCH_SIZE_OPTION] = q.shape[0] // num_chunks
+
             if len(conds_kv) > 0:
                 q_chunks = q.chunk(num_chunks, dim=0)
                 k_chunks = k.chunk(num_chunks, dim=0)
@@ -90,21 +94,21 @@ class AttentionCouplePPM(ComfyNodeABC):
                 lcm_tokens_v = lcm_for_list(num_tokens_v + [v.shape[1]])
                 conds_k_tensor = torch.cat(
                     [
-                        cond[0].repeat(self.batch_size, lcm_tokens_k // num_tokens_k[i], 1)
+                        cond[0].repeat(bs, lcm_tokens_k // num_tokens_k[i], 1) * strengths[i]
                         for i, cond in enumerate(conds_kv)
                     ],
                     dim=0,
                 )
                 conds_v_tensor = torch.cat(
                     [
-                        cond[1].repeat(self.batch_size, lcm_tokens_v // num_tokens_v[i], 1)
+                        cond[1].repeat(bs, lcm_tokens_v // num_tokens_v[i], 1) * strengths[i]
                         for i, cond in enumerate(conds_kv)
                     ],
                     dim=0,
                 )
 
                 qs, ks, vs = [], [], []
-                cond_or_uncond_couple = []
+                cond_or_uncond_couple.clear()
                 for i, cond_type in enumerate(cond_or_uncond):
                     q_target = q_chunks[i]
                     k_target = k_chunks[i].repeat(1, lcm_tokens_k // k.shape[1], 1)
@@ -124,16 +128,14 @@ class AttentionCouplePPM(ComfyNodeABC):
                 ks = torch.cat(ks, dim=0)
                 vs = torch.cat(vs, dim=0)
 
-                extra_options[self.COND_UNCOND_COUPLE] = cond_or_uncond_couple
-
                 return qs, ks, vs
 
             return q, k, v
 
         def attn2_output_patch(out, extra_options):
-            cond_or_uncond = extra_options[self.COND_UNCOND_COUPLE]
-            bs = self.batch_size
-            mask_downsample = get_mask(mask, self.batch_size, out.shape[1], extra_options)
+            cond_or_uncond = extra_options[self.COND_UNCOND_COUPLE_OPTION]
+            bs = extra_options[self.BATCH_SIZE_OPTION]
+            mask_downsample = get_mask(mask, bs, out.shape[1], extra_options)
             outputs = []
             cond_outputs = []
             i_cond = 0
