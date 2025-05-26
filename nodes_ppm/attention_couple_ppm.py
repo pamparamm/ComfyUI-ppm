@@ -18,7 +18,7 @@ UNCOND = 1
 
 def get_mask(mask, batch_size, num_tokens, extra_options):
     activations_shape = extra_options["activations_shape"]
-    size = (activations_shape[3], activations_shape[2])
+    size = activations_shape[-2:]
 
     num_conds = mask.shape[0]
     mask_downsample = F.interpolate(mask, size=size, mode="nearest")
@@ -41,10 +41,6 @@ class AttentionCouplePPM(ComfyNodeABC):
             "required": {
                 "model": (IO.MODEL, {}),
                 "base_mask": (IO.MASK, {}),
-            },
-            "optional": {
-                "cond_1": (IO.CONDITIONING, {}),
-                "mask_1": (IO.MASK, {}),
             },
         }
 
@@ -87,7 +83,7 @@ class AttentionCouplePPM(ComfyNodeABC):
             num_chunks = len(cond_or_uncond)
             self.batch_size = q.shape[0] // num_chunks
             if len(conds_kv) > 0:
-                q_chunks = q.chunk(num_chunks, dim=0)  # BUGGED?
+                q_chunks = q.chunk(num_chunks, dim=0)
                 k_chunks = k.chunk(num_chunks, dim=0)
                 v_chunks = v.chunk(num_chunks, dim=0)
                 lcm_tokens_k = lcm_for_list(num_tokens_k + [k.shape[1]])
