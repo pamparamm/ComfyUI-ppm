@@ -40,6 +40,12 @@ class AttentionCouplePPM(ComfyNodeABC):
         return {
             "required": {
                 "model": (IO.MODEL, {}),
+                "base_cond": (
+                    IO.CONDITIONING,
+                    {
+                        "tooltip": "Positive conditioning from KSampler/SamplerCustom node.\nCan be optionally scaled up/down by using ConditioningSetAreaStrength node.",
+                    },
+                ),
                 "base_mask": (IO.MASK, {}),
             },
         }
@@ -52,7 +58,7 @@ class AttentionCouplePPM(ComfyNodeABC):
     COND_UNCOND_COUPLE_OPTION = "cond_or_uncond_couple"
     BATCH_SIZE_OPTION = "batch_size_couple"
 
-    def patch(self, model: ModelPatcher, base_mask, **kwargs):
+    def patch(self, model: ModelPatcher, base_cond, base_mask, **kwargs):
         m = model.clone()
         dtype = m.model.diffusion_model.dtype
         device = comfy.model_management.get_torch_device()
@@ -68,6 +74,8 @@ class AttentionCouplePPM(ComfyNodeABC):
         mask = mask / mask.sum(dim=0, keepdim=True)
 
         conds: list[torch.Tensor] = [cond[0][0].to(device, dtype=dtype) for cond in cond_inputs]
+
+        base_strength: float = base_cond[0][1].get("strength", 1.0)
         strengths: list[float] = [cond[0][1].get("strength", 1.0) for cond in cond_inputs]
 
         conds_kv = (
@@ -120,8 +128,8 @@ class AttentionCouplePPM(ComfyNodeABC):
                         cond_or_uncond_couple.append(UNCOND)
                     else:
                         qs.append(q_target.repeat(num_conds, 1, 1))
-                        ks.append(torch.cat([k_target, conds_k_tensor], dim=0))
-                        vs.append(torch.cat([v_target, conds_v_tensor], dim=0))
+                        ks.append(torch.cat([k_target * base_strength, conds_k_tensor], dim=0))
+                        vs.append(torch.cat([v_target * base_strength, conds_v_tensor], dim=0))
                         cond_or_uncond_couple.extend(itertools.repeat(COND, num_conds))
 
                 qs = torch.cat(qs, dim=0)

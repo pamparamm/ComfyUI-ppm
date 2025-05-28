@@ -37,11 +37,11 @@ You can read more about NegPiP [in the original repo](https://github.com/hako-mi
 
 Modified implementation of AttentionCouple by [laksjdjf](https://github.com/laksjdjf) and [Haoming02](https://github.com/Haoming02), made to be more compatible with other custom nodes.
 
-Inputs for new regions are managed automatically: when you attach cond/mask of a region to the node, a new `cond_` / `mask_` input appears.
+Inputs for new regions are managed automatically: when you attach cond/mask of a region to the node, a new `cond_` / `mask_` input appears. Link `base_cond` input to the `positive` conditioning used in `KSampler`/`SamplerCustom`.
 
 You can use multiple `LatentToMaskBB` nodes to set bounding boxes for `AttentionCouplePPM`. The parameters are relative to your initial latent: `x=0.5, y=0.0, w=0.5, h=1.0` will produce a mask covering the right half of the image.
 
-You can also attach `ConditioningSetAreaStrength` node just before `cond_` input to increase/decrease conditioning strength.
+You can also use `ConditioningSetAreaStrength` to increase/decrease conditioning strength.
 
 ### DynSamplerSelect
 
