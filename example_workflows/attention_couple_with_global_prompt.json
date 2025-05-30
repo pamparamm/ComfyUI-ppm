@@ -1,0 +1,1098 @@
+{
+  "id": "2afb293d-28fb-4636-973c-3efca268e736",
+  "revision": 0,
+  "last_node_id": 54,
+  "last_link_id": 178,
+  "nodes": [
+    {
+      "id": 4,
+      "type": "CheckpointLoaderSimple",
+      "pos": [
+        -400,
+        180
+      ],
+      "size": [
+        410,
+        98
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "slot_index": 0,
+          "links": [
+            151
+          ]
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "slot_index": 1,
+          "links": [
+            152
+          ]
+        },
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "slot_index": 2,
+          "links": [
+            8
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CheckpointLoaderSimple"
+      },
+      "widgets_values": [
+        "sdxl\\illust\\NoobAI-XL-Vpred-v1.0+v29-v2_SIH.safetensors"
+      ]
+    },
+    {
+      "id": 6,
+      "type": "CLIPTextEncode",
+      "pos": [
+        250,
+        190
+      ],
+      "size": [
+        520,
+        90
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 166
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "slot_index": 0,
+          "links": [
+            173
+          ]
+        }
+      ],
+      "title": "CLIP Encode Cond_2",
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "2girls, kasane teto, blue background, black dress, red shoes,"
+      ]
+    },
+    {
+      "id": 7,
+      "type": "CLIPTextEncode",
+      "pos": [
+        880,
+        -30
+      ],
+      "size": [
+        210,
+        88
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 29
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "slot_index": 0,
+          "links": [
+            137
+          ]
+        }
+      ],
+      "title": "CLIP Encode Uncond",
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "unfinished, bad quality,"
+      ]
+    },
+    {
+      "id": 8,
+      "type": "VAEDecode",
+      "pos": [
+        1320,
+        -80
+      ],
+      "size": [
+        140,
+        46
+      ],
+      "flags": {},
+      "order": 18,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 132
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 8
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "slot_index": 0,
+          "links": [
+            10
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAEDecode"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 10,
+      "type": "PreviewImage",
+      "pos": [
+        1320,
+        0
+      ],
+      "size": [
+        580,
+        610
+      ],
+      "flags": {},
+      "order": 19,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 10
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "PreviewImage"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 11,
+      "type": "CLIPNegPip",
+      "pos": [
+        60,
+        180
+      ],
+      "size": [
+        140,
+        46
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 151
+        },
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 152
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            157
+          ]
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            29,
+            166,
+            167,
+            168
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPNegPip"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 13,
+      "type": "LatentToMaskBB",
+      "pos": [
+        70,
+        360
+      ],
+      "size": [
+        232.11972045898438,
+        178
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "link": 36
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": [
+            100,
+            162
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LatentToMaskBB"
+      },
+      "widgets_values": [
+        0,
+        0,
+        1,
+        1,
+        0.6,
+        0
+      ]
+    },
+    {
+      "id": 14,
+      "type": "LatentToMaskBB",
+      "pos": [
+        70,
+        660
+      ],
+      "size": [
+        232.11972045898438,
+        178
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "link": 37
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": [
+            99,
+            163
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LatentToMaskBB"
+      },
+      "widgets_values": [
+        0,
+        0,
+        0.5,
+        1,
+        0.4,
+        0
+      ]
+    },
+    {
+      "id": 15,
+      "type": "MaskPreview",
+      "pos": [
+        310,
+        360
+      ],
+      "size": [
+        210,
+        258
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mask",
+          "type": "MASK",
+          "link": 100
+        }
+      ],
+      "outputs": [],
+      "title": "Base Mask Preview",
+      "properties": {
+        "Node name for S&R": "MaskPreview"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 18,
+      "type": "CLIPTextEncode",
+      "pos": [
+        250,
+        60
+      ],
+      "size": [
+        460,
+        88
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 167
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "slot_index": 0,
+          "links": [
+            172
+          ]
+        }
+      ],
+      "title": "CLIP Encode Cond_1",
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "2girls, hatsune miku, red background, white dress, blue shoes, (twintails,:-1)"
+      ]
+    },
+    {
+      "id": 19,
+      "type": "EmptyLatentImageAR",
+      "pos": [
+        -210,
+        360
+      ],
+      "size": [
+        257.7749938964844,
+        130
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            36,
+            37,
+            125,
+            176
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "EmptyLatentImageAR"
+      },
+      "widgets_values": [
+        1024,
+        1.0000000000000002,
+        64,
+        1
+      ]
+    },
+    {
+      "id": 31,
+      "type": "MaskPreview",
+      "pos": [
+        310,
+        660
+      ],
+      "size": [
+        210,
+        258
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mask",
+          "type": "MASK",
+          "link": 99
+        }
+      ],
+      "outputs": [],
+      "title": "Mask_1 Preview",
+      "properties": {
+        "Node name for S&R": "MaskPreview"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 36,
+      "type": "ExtendIntermediateSigmas",
+      "pos": [
+        1100,
+        650
+      ],
+      "size": [
+        210,
+        130
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 127
+        }
+      ],
+      "outputs": [
+        {
+          "name": "SIGMAS",
+          "type": "SIGMAS",
+          "links": [
+            126
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ExtendIntermediateSigmas"
+      },
+      "widgets_values": [
+        2,
+        -1,
+        12,
+        "linear"
+      ]
+    },
+    {
+      "id": 37,
+      "type": "SamplerCustom",
+      "pos": [
+        1100,
+        -70
+      ],
+      "size": [
+        210,
+        442
+      ],
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 165
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 178
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 137
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "link": 134
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 126
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 125
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "LATENT",
+          "links": [
+            132
+          ]
+        },
+        {
+          "name": "denoised_output",
+          "type": "LATENT",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SamplerCustom"
+      },
+      "widgets_values": [
+        true,
+        0,
+        "fixed",
+        7
+      ]
+    },
+    {
+      "id": 38,
+      "type": "BasicScheduler",
+      "pos": [
+        1100,
+        510
+      ],
+      "size": [
+        210,
+        106
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 159
+        }
+      ],
+      "outputs": [
+        {
+          "name": "SIGMAS",
+          "type": "SIGMAS",
+          "links": [
+            127
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "BasicScheduler"
+      },
+      "widgets_values": [
+        "simple",
+        30,
+        1
+      ]
+    },
+    {
+      "id": 39,
+      "type": "KSamplerSelect",
+      "pos": [
+        1100,
+        410
+      ],
+      "size": [
+        210,
+        58
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "SAMPLER",
+          "type": "SAMPLER",
+          "links": [
+            134
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "KSamplerSelect"
+      },
+      "widgets_values": [
+        "euler_ancestral"
+      ]
+    },
+    {
+      "id": 48,
+      "type": "AttentionCouplePPM",
+      "pos": [
+        900,
+        330
+      ],
+      "size": [
+        186.96835327148438,
+        186
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 157
+        },
+        {
+          "name": "base_cond",
+          "type": "CONDITIONING",
+          "link": 171
+        },
+        {
+          "name": "base_mask",
+          "type": "MASK",
+          "link": 162
+        },
+        {
+          "name": "cond_1",
+          "type": "CONDITIONING",
+          "link": 172
+        },
+        {
+          "name": "mask_1",
+          "type": "MASK",
+          "link": 163
+        },
+        {
+          "name": "cond_2",
+          "type": "CONDITIONING",
+          "link": 173
+        },
+        {
+          "name": "mask_2",
+          "type": "MASK",
+          "link": 177
+        },
+        {
+          "name": "cond_3",
+          "type": "CONDITIONING",
+          "link": null
+        },
+        {
+          "name": "mask_3",
+          "type": "MASK",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            159,
+            165
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AttentionCouplePPM"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 50,
+      "type": "CLIPTextEncode",
+      "pos": [
+        250,
+        -70
+      ],
+      "size": [
+        460,
+        88
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 168
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "slot_index": 0,
+          "links": [
+            171,
+            178
+          ]
+        }
+      ],
+      "title": "CLIP Encode Cond (Global)",
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "2girls, holding hands,\nbest quality, abstract background,"
+      ]
+    },
+    {
+      "id": 53,
+      "type": "LatentToMaskBB",
+      "pos": [
+        60,
+        960
+      ],
+      "size": [
+        232.11972045898438,
+        178
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "link": 176
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": [
+            175,
+            177
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LatentToMaskBB"
+      },
+      "widgets_values": [
+        0.5,
+        0,
+        0.5,
+        1,
+        0.4,
+        0
+      ]
+    },
+    {
+      "id": 54,
+      "type": "MaskPreview",
+      "pos": [
+        310,
+        960
+      ],
+      "size": [
+        210,
+        258
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mask",
+          "type": "MASK",
+          "link": 175
+        }
+      ],
+      "outputs": [],
+      "title": "Mask_2 Preview",
+      "properties": {
+        "Node name for S&R": "MaskPreview"
+      },
+      "widgets_values": []
+    }
+  ],
+  "links": [
+    [
+      8,
+      4,
+      2,
+      8,
+      1,
+      "VAE"
+    ],
+    [
+      10,
+      8,
+      0,
+      10,
+      0,
+      "IMAGE"
+    ],
+    [
+      29,
+      11,
+      1,
+      7,
+      0,
+      "CLIP"
+    ],
+    [
+      36,
+      19,
+      0,
+      13,
+      0,
+      "LATENT"
+    ],
+    [
+      37,
+      19,
+      0,
+      14,
+      0,
+      "LATENT"
+    ],
+    [
+      99,
+      14,
+      0,
+      31,
+      0,
+      "MASK"
+    ],
+    [
+      100,
+      13,
+      0,
+      15,
+      0,
+      "MASK"
+    ],
+    [
+      125,
+      19,
+      0,
+      37,
+      5,
+      "LATENT"
+    ],
+    [
+      126,
+      36,
+      0,
+      37,
+      4,
+      "SIGMAS"
+    ],
+    [
+      127,
+      38,
+      0,
+      36,
+      0,
+      "SIGMAS"
+    ],
+    [
+      132,
+      37,
+      0,
+      8,
+      0,
+      "LATENT"
+    ],
+    [
+      134,
+      39,
+      0,
+      37,
+      3,
+      "SAMPLER"
+    ],
+    [
+      137,
+      7,
+      0,
+      37,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      151,
+      4,
+      0,
+      11,
+      0,
+      "MODEL"
+    ],
+    [
+      152,
+      4,
+      1,
+      11,
+      1,
+      "CLIP"
+    ],
+    [
+      157,
+      11,
+      0,
+      48,
+      0,
+      "MODEL"
+    ],
+    [
+      159,
+      48,
+      0,
+      38,
+      0,
+      "MODEL"
+    ],
+    [
+      162,
+      13,
+      0,
+      48,
+      2,
+      "MASK"
+    ],
+    [
+      163,
+      14,
+      0,
+      48,
+      4,
+      "MASK"
+    ],
+    [
+      165,
+      48,
+      0,
+      37,
+      0,
+      "MODEL"
+    ],
+    [
+      166,
+      11,
+      1,
+      6,
+      0,
+      "CLIP"
+    ],
+    [
+      167,
+      11,
+      1,
+      18,
+      0,
+      "CLIP"
+    ],
+    [
+      168,
+      11,
+      1,
+      50,
+      0,
+      "CLIP"
+    ],
+    [
+      171,
+      50,
+      0,
+      48,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      172,
+      18,
+      0,
+      48,
+      3,
+      "CONDITIONING"
+    ],
+    [
+      173,
+      6,
+      0,
+      48,
+      5,
+      "CONDITIONING"
+    ],
+    [
+      175,
+      53,
+      0,
+      54,
+      0,
+      "MASK"
+    ],
+    [
+      176,
+      19,
+      0,
+      53,
+      0,
+      "LATENT"
+    ],
+    [
+      177,
+      53,
+      0,
+      48,
+      6,
+      "MASK"
+    ],
+    [
+      178,
+      50,
+      0,
+      37,
+      1,
+      "CONDITIONING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 1,
+      "offset": [
+        0,
+        0
+      ]
+    },
+    "frontendVersion": "1.20.7"
+  },
+  "version": 0.4
+}
