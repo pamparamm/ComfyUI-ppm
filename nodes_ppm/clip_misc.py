@@ -1,3 +1,4 @@
+import json
 import re
 
 from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
@@ -18,13 +19,11 @@ def get_special_tokens_map(clip: CLIP) -> dict[str, set[int]]:
     special_tokens_map: dict[str, set[int]] = dict(
         (
             tokenizer.embedding_key.replace("clip_", ""),
-            set(
-                [
-                    token
-                    for token in [tokenizer.start_token, tokenizer.end_token, tokenizer.pad_token]
-                    if isinstance(token, int)
-                ]
-            ),
+            set([
+                token
+                for token in [tokenizer.start_token, tokenizer.end_token, tokenizer.pad_token]
+                if isinstance(token, int)
+            ]),
         )
         for tokenizer in tokenizers
     )
@@ -111,7 +110,14 @@ class CLIPTokenCounter(ComfyNodeABC):
             }
         }
 
-    RETURN_TYPES = (IO.STRING,)
+    RETURN_TYPES = (
+        IO.STRING,
+        IO.STRING,
+    )
+    RETURN_NAMES = (
+        "count",
+        "count_advanced",
+    )
     FUNCTION = "count"
 
     OUTPUT_NODE = True
@@ -130,15 +136,15 @@ class CLIPTokenCounter(ComfyNodeABC):
                     prompt_tokens = [t for t in tokens if t[0] not in special_tokens_map[key]]
                     tokens_map[key].append(prompt_tokens)
 
-        lengths = self._get_lengths(tokens_map)
-        return (lengths,)
+        count_map = self._get_count(tokens_map)
+        return (self._prettify_count(count_map), json.dumps(count_map))
 
     @staticmethod
-    def _get_lengths(tokens_map: dict[str, list[list[int]]]) -> dict[str, list[int]]:
-        lengths: dict[str, list[int]] = {}
+    def _get_count(tokens_map: dict[str, list[list[int]]]) -> dict[str, list[int]]:
+        count: dict[str, list[int]] = {}
         for key, prompt_tokens in tokens_map.items():
-            lengths[key] = [len(t) for t in prompt_tokens]
-        return lengths
+            count[key] = [len(t) for t in prompt_tokens]
+        return count
 
     @staticmethod
     # TODO Rewrite into more robust function
@@ -147,6 +153,24 @@ class CLIPTokenCounter(ComfyNodeABC):
         text = re.sub(r"\[(.*?)(\:.*?)+\]", r"\g<1>", text)  # replace prompt_control brackets
         prompts = text.split("BREAK")  # split text by BREAK keyword
         return prompts
+
+    @staticmethod
+    def _prettify_count(count_map: dict[str, list[int]]) -> str:
+        if len(count_map) == 0:
+            return "0"
+        count_key_to_clip: dict[str, list[str]] = {}
+        for key, count in count_map.items():
+            count_key = str(count)
+            if count_key not in count_key_to_clip:
+                count_key_to_clip[count_key] = []
+            count_key_to_clip[count_key].append(key)
+        if len(count_key_to_clip) == 1:
+            count_key = list(count_key_to_clip.keys())[0]
+            count_simple = count_key.removeprefix("[").removesuffix("]")
+            if len(count_simple) > 0:
+                return count_simple
+            return "0"
+        return json.dumps(count_map)  # fallback to json dump
 
 
 class ConditioningZeroOutCombine(ComfyNodeABC):
@@ -208,12 +232,10 @@ class CLIPTextEncodeInvertWeights(ComfyNodeABC):
                 special_tokens = special_tokens_map.get(clip_name, set())
                 tokens_inverted[clip_name] = []
                 for section in sections:
-                    tokens_inverted[clip_name].append(
-                        [
-                            (token, weight if token in special_tokens and not invert_special_tokens else -weight)
-                            for token, weight in section
-                        ]
-                    )
+                    tokens_inverted[clip_name].append([
+                        (token, weight if token in special_tokens and not invert_special_tokens else -weight)
+                        for token, weight in section
+                    ])
 
             cond, pooled = clip.encode_from_tokens(tokens_inverted, return_pooled=True)
             conditioning = [[cond, {"pooled_output": pooled}]]
