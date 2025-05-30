@@ -56,7 +56,6 @@ class AttentionCouplePPM(ComfyNodeABC):
     CATEGORY = "advanced/model"
 
     COND_UNCOND_COUPLE_OPTION = "cond_or_uncond_couple"
-    BATCH_SIZE_OPTION = "batch_size_couple"
 
     def patch(self, model: ModelPatcher, base_cond, base_mask, **kwargs):
         m = model.clone()
@@ -92,7 +91,7 @@ class AttentionCouplePPM(ComfyNodeABC):
             cond_or_uncond_couple = extra_options[self.COND_UNCOND_COUPLE_OPTION] = list(cond_or_uncond)
 
             num_chunks = len(cond_or_uncond)
-            bs = extra_options[self.BATCH_SIZE_OPTION] = q.shape[0] // num_chunks
+            bs = q.shape[0] // num_chunks
 
             if len(conds_kv) > 0:
                 q_chunks = q.chunk(num_chunks, dim=0)
@@ -142,7 +141,7 @@ class AttentionCouplePPM(ComfyNodeABC):
 
         def attn2_output_patch(out, extra_options):
             cond_or_uncond = extra_options[self.COND_UNCOND_COUPLE_OPTION]
-            bs = extra_options[self.BATCH_SIZE_OPTION]
+            bs = out.shape[0] // len(cond_or_uncond)
             mask_downsample = get_mask(mask, bs, out.shape[1], extra_options)
             outputs = []
             cond_outputs = []
