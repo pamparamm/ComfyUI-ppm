@@ -158,8 +158,10 @@ class AttentionCouplePPM(ComfyNodeABC):
                     cond_outputs.append(masked_output)
                     i_cond += 1
 
-            cond_output = torch.stack(cond_outputs).sum(0)
-            outputs.append(cond_output)
+            if len(cond_outputs) > 0:
+                cond_output = torch.stack(cond_outputs).sum(0)
+                outputs.append(cond_output)
+
             return torch.cat(outputs, dim=0)
 
         m.set_model_attn2_patch(attn2_patch)

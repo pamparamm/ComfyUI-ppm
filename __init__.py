@@ -2,9 +2,9 @@ from .nodes_ppm.attention_couple_ppm import AttentionCouplePPM
 from .nodes_ppm.clip_misc import (
     CLIPMicroConditioning,
     CLIPTextEncodeBREAK,
+    CLIPTextEncodeInvertWeights,
     CLIPTokenCounter,
     ConditioningZeroOutCombine,
-    CLIPTextEncodeInvertWeights,
 )
 from .nodes_ppm.clip_negpip import CLIPNegPip
 from .nodes_ppm.freeu_adv import FreeU2PPM
