@@ -4,6 +4,7 @@
 from functools import partial
 
 import torch
+
 from comfy import model_management
 from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
 from comfy.model_base import Flux, HunyuanVideo
@@ -12,6 +13,7 @@ from comfy.sd import CLIP
 from comfy.sd1_clip import SDClipModel, gen_empty_tokens
 
 from ..compat.advanced_encode import patch_adv_encode
+from ..compat.prompt_control import patch_prompt_control
 from ..dit.flux_negpip import flux_forward_orig_negpip
 from ..dit.hunyuan_video_negpip import (
     hunyuan_video_clip_encode_token_weights_negpip,
@@ -118,6 +120,8 @@ class CLIPNegPip(ComfyNodeABC):
     def patch(self, model: ModelPatcher, clip: CLIP):
         m = model.clone()
         c = clip.clone()
+
+        patch_prompt_control()
         patch_adv_encode()
 
         diffusion_model = type(m.model)
