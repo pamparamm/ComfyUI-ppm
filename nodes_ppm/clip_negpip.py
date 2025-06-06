@@ -2,9 +2,9 @@
 # https://github.com/laksjdjf/cd-tuner_negpip-ComfyUI/blob/938b838546cf774dc8841000996552cef52cccf3/negpip.py#L43-L84
 # https://github.com/hako-mikan/sd-webui-negpip
 from functools import partial
+from typing import Any
 
 import torch
-
 from comfy import model_management
 from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
 from comfy.model_base import Flux, HunyuanVideo
@@ -13,21 +13,17 @@ from comfy.sd import CLIP
 from comfy.sd1_clip import SDClipModel, gen_empty_tokens
 
 from ..compat.advanced_encode import patch_adv_encode
-from ..compat.prompt_control import patch_prompt_control
 from ..dit.flux_negpip import flux_forward_orig_negpip
 from ..dit.hunyuan_video_negpip import (
     hunyuan_video_clip_encode_token_weights_negpip,
     hunyuan_video_forward_orig_negpip,
 )
 
+NEGPIP_OPTION = "ppm_negpip"
+
 
 def has_negpip(model_options: dict):
-    try:
-        return negpip_attn.__class__ in map(
-            lambda _: _.__class__, model_options["transformer_options"]["patches"]["attn2_patch"]
-        )
-    except KeyError:
-        return False
+    return model_options.get(NEGPIP_OPTION, False)
 
 
 def negpip_attn(q, k, v, extra_options):
@@ -120,14 +116,15 @@ class CLIPNegPip(ComfyNodeABC):
     def patch(self, model: ModelPatcher, clip: CLIP):
         m = model.clone()
         c = clip.clone()
+        model_options: dict[str, Any] = m.model_options
+        clip_options: dict[str, Any] = clip.patcher.model_options
 
-        patch_prompt_control()
         patch_adv_encode()
 
         diffusion_model = type(m.model)
         is_clip_patched = False
 
-        if not has_negpip(m.model_options):
+        if not has_negpip(model_options):
             if hasattr(c.patcher.model, "clip_g"):
                 c.patcher.add_object_patch(
                     "clip_g.encode_token_weights", partial(encode_token_weights_negpip, c.patcher.model.clip_g)
@@ -151,6 +148,8 @@ class CLIPNegPip(ComfyNodeABC):
 
             if is_clip_patched:
                 m.set_model_attn2_patch(negpip_attn)
+                model_options[NEGPIP_OPTION] = True
+                clip_options[NEGPIP_OPTION] = True
 
                 if issubclass(diffusion_model, Flux):
                     m.add_object_patch(
