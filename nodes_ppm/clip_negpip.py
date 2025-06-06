@@ -117,7 +117,7 @@ class CLIPNegPip(ComfyNodeABC):
         m = model.clone()
         c = clip.clone()
         model_options: dict[str, Any] = m.model_options
-        clip_options: dict[str, Any] = clip.patcher.model_options
+        clip_options: dict[str, Any] = c.patcher.model_options
 
         patch_adv_encode()
 
