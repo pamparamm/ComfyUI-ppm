@@ -1,7 +1,7 @@
 import torch
 from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
-from comfy.model_base import ModelSamplingDiscrete
 from comfy.model_patcher import ModelPatcher
+from comfy.model_sampling import ModelSamplingDiscrete
 
 
 class ConvertTimestepToSigma(ComfyNodeABC):
