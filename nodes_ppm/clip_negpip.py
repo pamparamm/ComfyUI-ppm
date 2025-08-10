@@ -21,6 +21,12 @@ from ..dit.hunyuan_video_negpip import (
 )
 
 NEGPIP_OPTION = "ppm_negpip"
+SUPPORTED_ENCODERS = [
+    "clip_g",
+    "clip_l",
+    "t5xxl",
+    "llama",
+]
 
 
 def has_negpip(model_options: dict):
@@ -120,53 +126,43 @@ class CLIPNegPip(ComfyNodeABC):
         model_options: dict[str, Any] = m.model_options
         clip_options: dict[str, Any] = c.patcher.model_options
 
+        encoders = [e for e in SUPPORTED_ENCODERS if hasattr(c.patcher.model, e)]
+        if len(encoders) == 0:
+            return (m, c)
+
         patch_adv_encode()
 
-        diffusion_model = type(m.model)
-        is_clip_patched = False
-
         if not has_negpip(model_options):
-            if hasattr(c.patcher.model, "clip_g"):
+            for encoder in encoders:
                 c.patcher.add_object_patch(
-                    "clip_g.encode_token_weights", partial(encode_token_weights_negpip, c.patcher.model.clip_g)
+                    f"{encoder}.encode_token_weights",
+                    partial(encode_token_weights_negpip, getattr(c.patcher.model, encoder)),
                 )
-                is_clip_patched = True
-            if hasattr(c.patcher.model, "clip_l"):
-                c.patcher.add_object_patch(
-                    "clip_l.encode_token_weights", partial(encode_token_weights_negpip, c.patcher.model.clip_l)
-                )
-                is_clip_patched = True
-            if hasattr(c.patcher.model, "t5xxl"):
-                c.patcher.add_object_patch(
-                    "t5xxl.encode_token_weights", partial(encode_token_weights_negpip, c.patcher.model.t5xxl)
-                )
-                is_clip_patched = True
-            if hasattr(c.patcher.model, "llama"):
-                c.patcher.add_object_patch(
-                    "llama.encode_token_weights", partial(encode_token_weights_negpip, c.patcher.model.llama)
-                )
-                is_clip_patched = True
 
-            if is_clip_patched:
-                m.set_model_attn2_patch(negpip_attn)
-                model_options[NEGPIP_OPTION] = True
-                clip_options[NEGPIP_OPTION] = True
-
-                if issubclass(diffusion_model, Flux):
-                    m.add_object_patch(
-                        "diffusion_model.forward_orig", partial(flux_forward_orig_negpip, m.model.diffusion_model)
-                    )
-                if issubclass(diffusion_model, HunyuanVideo):
-                    c.patcher.add_object_patch(
-                        "encode_token_weights",
-                        partial(hunyuan_video_clip_encode_token_weights_negpip, c.patcher.model),
-                    )
-                    m.add_object_patch(
-                        "diffusion_model.forward_orig",
-                        partial(hunyuan_video_forward_orig_negpip, m.model.diffusion_model),
-                    )
+            m.set_model_attn2_patch(negpip_attn)
+            model_options[NEGPIP_OPTION] = True
+            clip_options[NEGPIP_OPTION] = True
+            self.patch_dit(m, c)
 
         return (m, c)
+
+    @staticmethod
+    def patch_dit(m: ModelPatcher, c: CLIP):
+        diffusion_model = type(m.model)
+
+        if issubclass(diffusion_model, Flux):
+            m.add_object_patch(
+                "diffusion_model.forward_orig", partial(flux_forward_orig_negpip, m.model.diffusion_model)
+            )
+        if issubclass(diffusion_model, HunyuanVideo):
+            c.patcher.add_object_patch(
+                "encode_token_weights",
+                partial(hunyuan_video_clip_encode_token_weights_negpip, c.patcher.model),
+            )
+            m.add_object_patch(
+                "diffusion_model.forward_orig",
+                partial(hunyuan_video_forward_orig_negpip, m.model.diffusion_model),
+            )
 
 
 NODE_CLASS_MAPPINGS = {
