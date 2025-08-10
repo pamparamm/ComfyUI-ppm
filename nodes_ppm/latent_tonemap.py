@@ -48,3 +48,12 @@ class LatentOperationTonemapLuminance(ComfyNodeABC):
             return output_latent
 
         return (tonemap_reinhard_luminance,)
+
+
+NODE_CLASS_MAPPINGS = {
+    "LatentOperationTonemapLuminance": LatentOperationTonemapLuminance,
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "LatentOperationTonemapLuminance": "LatentOperationTonemapLuminance",
+}

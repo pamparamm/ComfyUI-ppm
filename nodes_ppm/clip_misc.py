@@ -242,3 +242,20 @@ class CLIPTextEncodeInvertWeights(ComfyNodeABC):
             cond_concat = concat_node.concat(cond_concat, conditioning)[0] if cond_concat else conditioning
 
         return (cond_concat,)
+
+
+NODE_CLASS_MAPPINGS = {
+    "CLIPTextEncodeBREAK": CLIPTextEncodeBREAK,
+    "CLIPMicroConditioning": CLIPMicroConditioning,
+    "CLIPTokenCounter": CLIPTokenCounter,
+    "ConditioningZeroOutCombine": ConditioningZeroOutCombine,
+    "CLIPTextEncodeInvertWeights": CLIPTextEncodeInvertWeights,
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "CLIPTextEncodeBREAK": "CLIP Text Encode (BREAK)",
+    "CLIPMicroConditioning": "CLIPMicroConditioning",
+    "CLIPTokenCounter": "CLIPTokenCounter",
+    "ConditioningZeroOutCombine": "ConditioningZeroOut (Combine)",
+    "CLIPTextEncodeInvertWeights": "CLIP Text Encode (Invert Weights)",
+}

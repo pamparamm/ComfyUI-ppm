@@ -313,3 +313,22 @@ class RenormCFGPost(ComfyNodeABC):
         m = model.clone()
         m.set_model_sampler_post_cfg_function(renorm_cfg_func)
         return (m,)
+
+
+NODE_CLASS_MAPPINGS = {
+    "Guidance Limiter": GuidanceLimiter,
+    "CFGLimiterGuider": CFGLimiterGuider,
+    "RescaleCFGPost": RescaleCFGPost,
+    "DynamicThresholdingSimplePost": DynamicThresholdingSimplePost,
+    "DynamicThresholdingPost": DynamicThresholdingPost,
+    "RenormCFGPost": RenormCFGPost,
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "Guidance Limiter": "Guidance Limiter",
+    "CFGLimiterGuider": "CFGLimiterGuider",
+    "RescaleCFGPost": "RescaleCFGPost",
+    "DynamicThresholdingSimplePost": "DynamicThresholdingSimplePost",
+    "DynamicThresholdingPost": "DynamicThresholdingFullPost",
+    "RenormCFGPost": "RenormCFGPost",
+}

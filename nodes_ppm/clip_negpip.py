@@ -166,3 +166,12 @@ class CLIPNegPip(ComfyNodeABC):
                     )
 
         return (m, c)
+
+
+NODE_CLASS_MAPPINGS = {
+    "CLIPNegPip": CLIPNegPip,
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "CLIPNegPip": "CLIP NegPip",
+}

@@ -11,6 +11,7 @@ CFGPP_SAMPLER_NAMES_COMFY_ETA: list = [
 CFGPP_SAMPLER_NAMES_COMFY: list = [
     "euler_cfg_pp",
     "dpmpp_2m_cfg_pp",
+    "gradient_estimation_cfg_pp",
     *CFGPP_SAMPLER_NAMES_COMFY_ETA,
 ]
 
@@ -124,3 +125,41 @@ class PPMSamplerSelect(ComfyNodeABC):
         extra_options["s_sigma_max"] = ms.sigma_max
         sampler = KSAMPLER(sampler_func, extra_options=extra_options)
         return (sampler,)
+
+
+class SamplerGradientEstimation(ComfyNodeABC):
+    @classmethod
+    def INPUT_TYPES(cls) -> InputTypeDict:
+        return {
+            "required": {
+                "sampler_name": (IO.COMBO, {"options": ["gradient_estimation", "gradient_estimation_cfg_pp"]}),
+                "gamma": (IO.FLOAT, {"default": 2.0, "min": 2.0, "max": 5.0, "step": 0.01, "round": 0.001}),
+            }
+        }
+
+    RETURN_TYPES = (IO.SAMPLER,)
+    CATEGORY = "sampling/custom_sampling/samplers"
+
+    FUNCTION = "get_sampler"
+
+    def get_sampler(self, sampler_name: str, gamma=2.0):
+        sampler_func = getattr(k_diffusion_sampling, "sample_{}".format(sampler_name))
+        extra_options = {}
+        extra_options["ge_gamma"] = gamma
+        sampler = KSAMPLER(sampler_func, extra_options=extra_options)
+        return (sampler,)
+
+
+NODE_CLASS_MAPPINGS = {
+    "CFGPPSamplerSelect": CFGPPSamplerSelect,
+    "DynSamplerSelect": DynSamplerSelect,
+    "PPMSamplerSelect": PPMSamplerSelect,
+    "SamplerGradientEstimation": SamplerGradientEstimation,
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "CFGPPSamplerSelect": "CFG++SamplerSelect",
+    "DynSamplerSelect": "DynSamplerSelect",
+    "PPMSamplerSelect": "PPMSamplerSelect",
+    "SamplerGradientEstimation": "SamplerGradientEstimation",
+}

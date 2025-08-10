@@ -35,7 +35,10 @@ class EmptyLatentImageAR(ComfyNodeABC):
         return {
             "required": {
                 "resolution": (IO.INT, {"default": 512, "min": 16, "max": MAX_RESOLUTION, "step": 8}),
-                "ratio": (IO.FLOAT, {"default": 1.0, "min": MIN_RATIO, "max": MAX_RATIO, "step": 0.001}),
+                "ratio": (
+                    IO.FLOAT,
+                    {"default": 1.0, "min": MIN_RATIO, "max": MAX_RATIO, "step": 0.001, "round": 0.001},
+                ),
                 "step": (IO.INT, {"default": 64, "min": 8, "max": 128, "step": 8}),
                 "batch_size": (IO.INT, {"default": 1, "min": 1, "max": 4096}),
             }
@@ -165,3 +168,18 @@ class MaskCompositePPM(ComfyNodeABC):
             output = maskComposite.combine(output, mask, 0, 0, operation)[0]
 
         return (output,)
+
+
+NODE_CLASS_MAPPINGS = {
+    "EmptyLatentImageAR": EmptyLatentImageAR,
+    "LatentToWidthHeight": LatentToWidthHeight,
+    "LatentToMaskBB": LatentToMaskBB,
+    "MaskCompositePPM": MaskCompositePPM,
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "EmptyLatentImageAR": "Empty Latent Image (Aspect Ratio)",
+    "LatentToWidthHeight": "Latent to Width & Height",
+    "LatentToMaskBB": "Latent to Mask (Bounding Box)",
+    "MaskCompositePPM": "MaskCompositePPM",
+}

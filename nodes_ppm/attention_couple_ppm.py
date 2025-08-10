@@ -16,17 +16,6 @@ COND = 0
 UNCOND = 1
 
 
-def get_mask(mask, batch_size, num_tokens, extra_options):
-    activations_shape = extra_options["activations_shape"]
-    size = activations_shape[-2:]
-
-    num_conds = mask.shape[0]
-    mask_downsample = F.interpolate(mask, size=size, mode="nearest")
-    mask_downsample_reshaped = mask_downsample.view(num_conds, num_tokens, 1).repeat_interleave(batch_size, dim=0)
-
-    return mask_downsample_reshaped
-
-
 def lcm_for_list(numbers):
     current_lcm = numbers[0]
     for number in numbers[1:]:
@@ -141,8 +130,11 @@ class AttentionCouplePPM(ComfyNodeABC):
 
         def attn2_output_patch(out, extra_options):
             cond_or_uncond = extra_options[self.COND_UNCOND_COUPLE_OPTION]
+            size = tuple(extra_options["activations_shape"][-2:])
             bs = out.shape[0] // len(cond_or_uncond)
-            mask_downsample = get_mask(mask, bs, out.shape[1], extra_options)
+            num_tokens = out.shape[1]
+            mask_downsample = self.reshape_mask(mask, size, bs, num_tokens)
+
             outputs = []
             cond_outputs = []
             i_cond = 0
@@ -167,3 +159,20 @@ class AttentionCouplePPM(ComfyNodeABC):
         m.set_model_attn2_output_patch(attn2_output_patch)
 
         return (m,)
+
+    @staticmethod
+    def reshape_mask(mask: torch.Tensor, size: tuple[int, int], bs: int, num_tokens: int):
+        num_conds = mask.shape[0]
+        mask_downsample = F.interpolate(mask, size=size, mode="nearest")
+        mask_downsample_reshaped = mask_downsample.view(num_conds, num_tokens, 1).repeat_interleave(bs, dim=0)
+
+        return mask_downsample_reshaped
+
+
+NODE_CLASS_MAPPINGS = {
+    "AttentionCouplePPM": AttentionCouplePPM,
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "AttentionCouplePPM": "Attention Couple (PPM)",
+}

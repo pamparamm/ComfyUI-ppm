@@ -251,3 +251,12 @@ class FreeU2PPM(ComfyNodeABC):
             logging.debug("Patching middle block")
             m.set_model_patch(block_patch, "middle_block_patch")
         return (m,)
+
+
+NODE_CLASS_MAPPINGS = {
+    "FreeU2PPM": FreeU2PPM,
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "FreeU2PPM": "FreeU V2 (PPM)",
+}

@@ -40,3 +40,12 @@ class ConvertTimestepToSigma(ComfyNodeABC):
             sigma = schedule_sigmas[schedule_step]
 
         return (sigma,)
+
+
+NODE_CLASS_MAPPINGS = {
+    "ConvertTimestepToSigma": ConvertTimestepToSigma,
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "ConvertTimestepToSigma": "Convert Timestep To Sigma",
+}
