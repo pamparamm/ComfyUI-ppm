@@ -1,8 +1,9 @@
 import math
 from typing import Literal
 
-import comfy.model_management
 import torch
+
+import comfy.model_management
 from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
 from comfy_extras.nodes_mask import MaskComposite
 from nodes import MAX_RESOLUTION

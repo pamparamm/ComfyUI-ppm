@@ -4,9 +4,10 @@
 import itertools
 import math
 
-import comfy.model_management
 import torch
 import torch.nn.functional as F
+
+import comfy.model_management
 from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
 from comfy.model_patcher import ModelPatcher
 

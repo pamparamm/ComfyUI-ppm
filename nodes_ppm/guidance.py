@@ -1,7 +1,8 @@
 from typing import Literal
 
-import comfy.samplers
 import torch
+
+import comfy.samplers
 from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
 from comfy.model_patcher import ModelPatcher
 
