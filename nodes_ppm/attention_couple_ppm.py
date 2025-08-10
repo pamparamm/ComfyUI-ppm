@@ -67,11 +67,8 @@ class AttentionCouplePPM(ComfyNodeABC):
         base_strength: float = base_cond[0][1].get("strength", 1.0)
         strengths: list[float] = [cond[0][1].get("strength", 1.0) for cond in cond_inputs]
 
-        conds_kv = (
-            [(cond[:, 0::2], cond[:, 1::2]) for cond in conds]
-            if has_negpip(m.model_options)
-            else [(cond, cond) for cond in conds]
-        )
+        _has_negpip = has_negpip(m.model_options)
+        conds_kv = [self.split_kv_cond(cond, _has_negpip) for cond in conds]
 
         num_tokens_k = [cond[0].shape[1] for cond in conds_kv]
         num_tokens_v = [cond[1].shape[1] for cond in conds_kv]
@@ -162,12 +159,21 @@ class AttentionCouplePPM(ComfyNodeABC):
         return (m,)
 
     @staticmethod
-    def reshape_mask(mask: torch.Tensor, size: tuple[int, int], bs: int, num_tokens: int):
+    def reshape_mask(mask: torch.Tensor, size: tuple[int, int], bs: int, num_tokens: int) -> torch.Tensor:
         num_conds = mask.shape[0]
         mask_downsample = F.interpolate(mask, size=size, mode="nearest")
         mask_downsample_reshaped = mask_downsample.view(num_conds, num_tokens, 1).repeat_interleave(bs, dim=0)
 
         return mask_downsample_reshaped
+
+    @staticmethod
+    def split_kv_cond(cond: torch.Tensor, has_negpip: bool) -> tuple[torch.Tensor, torch.Tensor]:
+        if not has_negpip:
+            return (cond, cond)
+
+        cond_k, cond_v = cond[:, 0::2], cond[:, 1::2]
+        # Prevent attention errors on shape mismatch
+        return (cond_k, cond_v) if cond_k.shape == cond_v.shape else (cond, cond)
 
 
 NODE_CLASS_MAPPINGS = {
