@@ -5,6 +5,7 @@ import torch
 import comfy.samplers
 from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
 from comfy.model_patcher import ModelPatcher
+from comfy_extras.nodes_tcfg import score_tangential_damping
 
 
 # Based on Applying Guidance in a Limited Interval Improves Sample and Distribution Quality in Diffusion Models by Kynkäänniemi et al.
@@ -316,6 +317,51 @@ class RenormCFGPost(ComfyNodeABC):
         return (m,)
 
 
+# Slightly modified version of TCFG from ComfyUI
+class TCFGAdvanced(ComfyNodeABC):
+    @classmethod
+    def INPUT_TYPES(cls) -> InputTypeDict:
+        return {
+            "required": {
+                "model": (IO.MODEL, {}),
+                "sigma_start": (IO.FLOAT, {"default": -1.0, "min": -1.0, "max": 10000.0, "step": 0.01, "round": False}),
+                "sigma_end": (IO.FLOAT, {"default": -1.0, "min": -1.0, "max": 10000.0, "step": 0.01, "round": False}),
+            }
+        }
+
+    RETURN_TYPES = (IO.MODEL,)
+    RETURN_NAMES = ("patched_model",)
+    FUNCTION = "patch"
+
+    CATEGORY = "advanced/guidance"
+    DESCRIPTION = "TCFG – Tangential Damping CFG (2503.18137)\n\nRefine the uncond (negative) to align with the cond (positive) for improving quality."
+
+    def patch(self, model: ModelPatcher, sigma_start: float, sigma_end: float):
+        m = model.clone()
+
+        def tangential_damping_cfg(args):
+            #  Assume [cond, uncond, ...]
+            x: torch.Tensor = args["input"]
+            conds_out: list[torch.Tensor] = args["conds_out"]
+            sigma: torch.Tensor = args["sigma"]
+            if (
+                len(conds_out) <= 1
+                or None in args["conds"][:2]
+                or (sigma_start >= 0 and sigma[0] > sigma_start)
+                or (sigma_end >= 0 and sigma[0] <= sigma_end)
+            ):
+                # Skip when either cond or uncond is None
+                return conds_out
+            cond_pred = conds_out[0]
+            uncond_pred = conds_out[1]
+            uncond_td = score_tangential_damping(x - cond_pred, x - uncond_pred)
+            uncond_pred_td = x - uncond_td
+            return [cond_pred, uncond_pred_td] + conds_out[2:]
+
+        m.set_model_sampler_pre_cfg_function(tangential_damping_cfg)
+        return (m,)
+
+
 NODE_CLASS_MAPPINGS = {
     "Guidance Limiter": GuidanceLimiter,
     "CFGLimiterGuider": CFGLimiterGuider,
@@ -323,6 +369,7 @@ NODE_CLASS_MAPPINGS = {
     "DynamicThresholdingSimplePost": DynamicThresholdingSimplePost,
     "DynamicThresholdingPost": DynamicThresholdingPost,
     "RenormCFGPost": RenormCFGPost,
+    "TCFGAdvanced": TCFGAdvanced,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -332,4 +379,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "DynamicThresholdingSimplePost": "DynamicThresholdingSimplePost",
     "DynamicThresholdingPost": "DynamicThresholdingFullPost",
     "RenormCFGPost": "RenormCFGPost",
+    "TCFGAdvanced": "Tangential Damping CFG (Advanced)",
 }

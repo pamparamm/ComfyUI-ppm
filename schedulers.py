@@ -3,7 +3,7 @@ import torch
 import comfy.samplers
 from comfy.samplers import SCHEDULER_NAMES, beta_scheduler, simple_scheduler
 from comfy_extras.nodes_align_your_steps import loglinear_interp
-from comfy_extras.nodes_gits import GITSScheduler
+from comfy_extras.nodes_gits import NOISE_LEVELS as GITS_NOISE_LEVELS
 
 calculate_sigmas_original = comfy.samplers.calculate_sigmas
 
@@ -32,6 +32,25 @@ def _ays_scheduler(model_sampling, steps, force_sigma_min, model_type="SDXL"):
     return sigmas.cpu()
 
 
+# Copied from comfy_extras.nodes_gits.GITSScheduler
+def _gits_scheduler(coeff, steps, denoise):
+    total_steps = steps
+    if denoise < 1.0:
+        if denoise <= 0.0:
+            return (torch.FloatTensor([]),)
+        total_steps = round(steps * denoise)
+
+    if steps <= 20:
+        sigmas = GITS_NOISE_LEVELS[round(coeff, 2)][steps - 2][:]
+    else:
+        sigmas = GITS_NOISE_LEVELS[round(coeff, 2)][-1][:]
+        sigmas = loglinear_interp(sigmas, steps + 1)
+
+    sigmas = sigmas[-(total_steps + 1) :]
+    sigmas[-1] = 0
+    return torch.FloatTensor(sigmas)
+
+
 def _calculate_sigmas_hijack(model_sampling, scheduler_name, steps):
     if scheduler_name == AYS_SCHEDULER:
         sigmas = _ays_scheduler(model_sampling, steps, False)
@@ -42,7 +61,7 @@ def _calculate_sigmas_hijack(model_sampling, scheduler_name, steps):
     elif scheduler_name == AYS_30_PLUS_SCHEDULER:
         sigmas = _ays_scheduler(model_sampling, steps, True, "SDXL_30")
     elif scheduler_name == GITS_SCHEDULER:
-        sigmas = GITSScheduler().get_sigmas(1.2, steps, 1.0)[0]
+        sigmas = _gits_scheduler(1.2, steps, 1.0)
     elif scheduler_name == BETA_1_1_SCHEDULER:
         sigmas = beta_scheduler(model_sampling, steps, 1.0, 1.0)
     else:

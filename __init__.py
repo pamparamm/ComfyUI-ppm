@@ -8,6 +8,8 @@ from .nodes_ppm import (
     latent_tonemap,
     misc,
     samplers,
+    vae,
+    attention_selector,
 )
 from .schedulers import hijack_schedulers
 
@@ -23,6 +25,8 @@ NODE_CLASS_MAPPINGS = {
     **latent_tonemap.NODE_CLASS_MAPPINGS,
     **misc.NODE_CLASS_MAPPINGS,
     **samplers.NODE_CLASS_MAPPINGS,
+    **vae.NODE_CLASS_MAPPINGS,
+    **attention_selector.NODE_CLASS_MAPPINGS,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -35,6 +39,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     **latent_tonemap.NODE_DISPLAY_NAME_MAPPINGS,
     **misc.NODE_DISPLAY_NAME_MAPPINGS,
     **samplers.NODE_DISPLAY_NAME_MAPPINGS,
+    **vae.NODE_DISPLAY_NAME_MAPPINGS,
+    **attention_selector.NODE_DISPLAY_NAME_MAPPINGS,
 }
 
 
