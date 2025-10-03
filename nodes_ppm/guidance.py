@@ -1,10 +1,11 @@
-from typing import Literal
+from typing import Callable, Literal
 
 import torch
 
 import comfy.samplers
 from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
 from comfy.model_patcher import ModelPatcher
+from comfy.model_sampling import ModelSamplingDiscrete
 from comfy_extras.nodes_tcfg import score_tangential_damping
 
 
@@ -362,6 +363,51 @@ class TCFGAdvanced(ComfyNodeABC):
         return (m,)
 
 
+class SkipFirstStepCFG(ComfyNodeABC):
+    @classmethod
+    def INPUT_TYPES(cls) -> InputTypeDict:
+        return {
+            "required": {
+                "model": (IO.MODEL, {}),
+                "skip_percent": (
+                    IO.FLOAT,
+                    {"default": 0.01, "min": 0.0, "max": 1.0, "step": 0.001},
+                ),
+            }
+        }
+
+    RETURN_TYPES = (IO.MODEL,)
+    FUNCTION = "patch"
+
+    CATEGORY = "model_patches/unet"
+
+    def patch(self, model: ModelPatcher, skip_percent: float):
+        m = model.clone()
+        prev_calc_cond_batch: Callable | None = m.model_options.get("sampler_calc_cond_batch_function")  # type: ignore
+
+        def skip_first_step_cfg(args):
+            model = args["model"]
+            conds = args["conds"]
+            x = args["input"]
+            timestep: torch.Tensor = args["sigma"]
+            model_options = args["model_options"]
+
+            model_sampling: ModelSamplingDiscrete = model.model_sampling
+            sigma_val = model_sampling.percent_to_sigma(skip_percent)
+
+            if timestep[0] > sigma_val:
+                conds[1] = None
+
+            if prev_calc_cond_batch:
+                args = {"conds": conds, "input": x, "sigma": timestep, "model": model, "model_options": model_options}
+                return prev_calc_cond_batch(args)
+            else:
+                return comfy.samplers.calc_cond_batch(model, conds, x, timestep, model_options)
+
+        m.set_model_sampler_calc_cond_batch_function(skip_first_step_cfg)
+        return (m,)
+
+
 NODE_CLASS_MAPPINGS = {
     "Guidance Limiter": GuidanceLimiter,
     "CFGLimiterGuider": CFGLimiterGuider,
@@ -370,6 +416,7 @@ NODE_CLASS_MAPPINGS = {
     "DynamicThresholdingPost": DynamicThresholdingPost,
     "RenormCFGPost": RenormCFGPost,
     "TCFGAdvanced": TCFGAdvanced,
+    "SkipFirstStepCFG": SkipFirstStepCFG,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -380,4 +427,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "DynamicThresholdingPost": "DynamicThresholdingFullPost",
     "RenormCFGPost": "RenormCFGPost",
     "TCFGAdvanced": "Tangential Damping CFG (Advanced)",
+    "SkipFirstStepCFG": "Skip CFG on first step",
 }
