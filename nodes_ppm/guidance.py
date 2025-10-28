@@ -325,6 +325,7 @@ class TCFGAdvanced(ComfyNodeABC):
         return {
             "required": {
                 "model": (IO.MODEL, {}),
+                "multiplier": (IO.FLOAT, {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01, "round": 0.01}),
                 "sigma_start": (IO.FLOAT, {"default": -1.0, "min": -1.0, "max": 10000.0, "step": 0.01, "round": False}),
                 "sigma_end": (IO.FLOAT, {"default": -1.0, "min": -1.0, "max": 10000.0, "step": 0.01, "round": False}),
             }
@@ -337,7 +338,7 @@ class TCFGAdvanced(ComfyNodeABC):
     CATEGORY = "advanced/guidance"
     DESCRIPTION = "TCFG – Tangential Damping CFG (2503.18137)\n\nRefine the uncond (negative) to align with the cond (positive) for improving quality."
 
-    def patch(self, model: ModelPatcher, sigma_start: float, sigma_end: float):
+    def patch(self, model: ModelPatcher, multiplier: float, sigma_start: float, sigma_end: float):
         m = model.clone()
 
         def tangential_damping_cfg(args):
@@ -357,7 +358,8 @@ class TCFGAdvanced(ComfyNodeABC):
             uncond_pred = conds_out[1]
             uncond_td = score_tangential_damping(x - cond_pred, x - uncond_pred)
             uncond_pred_td = x - uncond_td
-            return [cond_pred, uncond_pred_td] + conds_out[2:]
+            uncond_pred_final = multiplier * uncond_pred_td + (1.0 - multiplier) * uncond_pred
+            return [cond_pred, uncond_pred_final] + conds_out[2:]
 
         m.set_model_sampler_pre_cfg_function(tangential_damping_cfg)
         return (m,)
@@ -387,7 +389,7 @@ class SkipFirstStepCFG(ComfyNodeABC):
 
         def skip_first_step_cfg(args):
             model = args["model"]
-            conds = args["conds"]
+            conds = args["conds"].copy()
             x = args["input"]
             timestep: torch.Tensor = args["sigma"]
             model_options = args["model_options"]
