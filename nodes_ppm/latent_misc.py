@@ -5,7 +5,6 @@ import torch
 
 import comfy.model_management
 from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
-from comfy_extras.nodes_mask import MaskComposite
 from nodes import MAX_RESOLUTION
 
 MIN_RATIO = 0.15
@@ -154,19 +153,62 @@ class MaskCompositePPM(ComfyNodeABC):
 
     CATEGORY = "mask"
 
+    # Copied from comfy_extras.nodes_mask.MaskComposite
+    def mask_composite_combine(
+        self,
+        destination: torch.Tensor,
+        source: torch.Tensor,
+        x: int,
+        y: int,
+        operation: str,
+    ):
+        output = destination.reshape((-1, destination.shape[-2], destination.shape[-1])).clone()
+        source = source.reshape((-1, source.shape[-2], source.shape[-1]))
+
+        left, top = (x, y)
+        right, bottom = (
+            min(left + source.shape[-1], destination.shape[-1]),
+            min(top + source.shape[-2], destination.shape[-2]),
+        )
+        visible_width, visible_height = (right - left, bottom - top)
+
+        source_portion = source[:, :visible_height, :visible_width]
+        destination_portion = output[:, top:bottom, left:right]
+
+        if operation == "multiply":
+            output[:, top:bottom, left:right] = destination_portion * source_portion
+        elif operation == "add":
+            output[:, top:bottom, left:right] = destination_portion + source_portion
+        elif operation == "subtract":
+            output[:, top:bottom, left:right] = destination_portion - source_portion
+        elif operation == "and":
+            output[:, top:bottom, left:right] = torch.bitwise_and(
+                destination_portion.round().bool(), source_portion.round().bool()
+            ).float()
+        elif operation == "or":
+            output[:, top:bottom, left:right] = torch.bitwise_or(
+                destination_portion.round().bool(), source_portion.round().bool()
+            ).float()
+        elif operation == "xor":
+            output[:, top:bottom, left:right] = torch.bitwise_xor(
+                destination_portion.round().bool(), source_portion.round().bool()
+            ).float()
+
+        output = torch.clamp(output, 0.0, 1.0)
+        return output
+
     def combine(
         self,
         operation: Literal["multiply", "add", "subtract", "and", "or", "xor"],
         **kwargs: torch.Tensor,
     ):
         output: torch.Tensor | None = None
-        maskComposite = MaskComposite()
 
         for mask in kwargs.values():
             if output is None:
                 output = mask
                 continue
-            output = maskComposite.combine(output, mask, 0, 0, operation)[0]
+            output = self.mask_composite_combine(output, mask, 0, 0, operation)
 
         return (output,)
 
