@@ -24,7 +24,8 @@ class VAEPadding(ComfyNodeABC):
     FUNCTION = "patch"
 
     CATEGORY = "latent"
-    DESCRIPTION = "Sets padding mode for all Conv2D layers in VAE (necessary for some VAEs like `Anzhc/MS-LC-EQ-D-VR_VAE`)"
+    DESCRIPTION = "DEPRECATED: use the one from `https://github.com/Jelosus2/comfyui-vae-reflection`\nSets padding mode for all Conv2D layers in VAE (necessary for some VAEs like `Anzhc/MS-LC-EQ-D-VR_VAE`)"
+    DEPRECATED = True
 
     def patch(self, vae: VAE, mode: str):
         if not isinstance(vae.first_stage_model, AutoencoderKL):

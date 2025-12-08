@@ -11,7 +11,7 @@ from .nodes_ppm import (
     vae,
     attention_selector,
 )
-from .schedulers import hijack_schedulers
+from .schedulers import inject_schedulers
 
 WEB_DIRECTORY = "./js"
 
@@ -44,4 +44,4 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 }
 
 
-hijack_schedulers()
+inject_schedulers()
