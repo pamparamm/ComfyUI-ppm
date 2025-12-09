@@ -50,4 +50,4 @@ def inject_schedulers():
         raise RuntimeError("Schedulers are already injected")
 
     comfy.samplers.SCHEDULER_HANDLERS.update(CUSTOM_HANDLERS)
-    comfy.samplers.SCHEDULER_NAMES = list(comfy.samplers.SCHEDULER_HANDLERS)
+    comfy.samplers.SCHEDULER_NAMES.extend(CUSTOM_HANDLERS)
