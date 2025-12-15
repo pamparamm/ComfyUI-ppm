@@ -8,13 +8,14 @@ import torch
 import torch.nn.functional as F
 
 import comfy.model_management
-from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
 from comfy.model_patcher import ModelPatcher
+from comfy_api.latest import io
 
 from .clip_negpip import has_negpip
 
 COND = 0
 UNCOND = 1
+COND_UNCOND_COUPLE_OPTION = "cond_or_uncond_couple"
 
 
 def lcm_for_list(numbers):
@@ -24,30 +25,34 @@ def lcm_for_list(numbers):
     return current_lcm
 
 
-class AttentionCouplePPM(ComfyNodeABC):
+# TODO Migrate to io.Autogrow.TemplatePrefix
+class AttentionCouplePPM(io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(cls) -> InputTypeDict:
-        return {
-            "required": {
-                "model": (IO.MODEL, {}),
-                "base_cond": (
-                    IO.CONDITIONING,
-                    {
-                        "tooltip": "Positive conditioning from KSampler/SamplerCustom node.\nCan be optionally scaled up/down by using ConditioningSetAreaStrength node.",
-                    },
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="AttentionCouplePPM",
+            display_name="Attention Couple (PPM)",
+            category="advanced/model",
+            inputs=[
+                io.Model.Input("model"),
+                io.Conditioning.Input(
+                    "base_cond",
+                    tooltip="Positive conditioning from KSampler/SamplerCustom node.\n"
+                    "Can be optionally scaled up/down by using ConditioningSetAreaStrength node.",
                 ),
-                "base_mask": (IO.MASK, {}),
-            },
-        }
+                io.Mask.Input("base_mask"),
+            ],
+            outputs=[
+                io.Model.Output(),
+            ],
+        )
 
-    RETURN_TYPES = (IO.MODEL,)
-    FUNCTION = "patch"
+    @classmethod
+    def execute(cls, **kwargs) -> io.NodeOutput:
+        model: ModelPatcher = kwargs["model"]
+        base_cond = kwargs["base_cond"]
+        base_mask = kwargs["base_mask"]
 
-    CATEGORY = "advanced/model"
-
-    COND_UNCOND_COUPLE_OPTION = "cond_or_uncond_couple"
-
-    def patch(self, model: ModelPatcher, base_cond, base_mask, **kwargs):
         m = model.clone()
         dtype = m.model.diffusion_model.dtype
         device = comfy.model_management.get_torch_device()
@@ -68,14 +73,14 @@ class AttentionCouplePPM(ComfyNodeABC):
         strengths: list[float] = [cond[0][1].get("strength", 1.0) for cond in cond_inputs]
 
         _has_negpip = has_negpip(m.model_options)
-        conds_kv = [self.split_kv_cond(cond, _has_negpip) for cond in conds]
+        conds_kv = [cls.split_kv_cond(cond, _has_negpip) for cond in conds]
 
         num_tokens_k = [cond[0].shape[1] for cond in conds_kv]
         num_tokens_v = [cond[1].shape[1] for cond in conds_kv]
 
         def attn2_patch(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, extra_options):
             cond_or_uncond = extra_options["cond_or_uncond"]
-            cond_or_uncond_couple = extra_options[self.COND_UNCOND_COUPLE_OPTION] = list(cond_or_uncond)
+            cond_or_uncond_couple = extra_options[COND_UNCOND_COUPLE_OPTION] = list(cond_or_uncond)
 
             num_chunks = len(cond_or_uncond)
             bs = q.shape[0] // num_chunks
@@ -127,11 +132,11 @@ class AttentionCouplePPM(ComfyNodeABC):
             return q, k, v
 
         def attn2_output_patch(out, extra_options):
-            cond_or_uncond = extra_options[self.COND_UNCOND_COUPLE_OPTION]
+            cond_or_uncond = extra_options[COND_UNCOND_COUPLE_OPTION]
             size = tuple(extra_options["activations_shape"][-2:])
             bs = out.shape[0] // len(cond_or_uncond)
             num_tokens = out.shape[1]
-            mask_downsample = self.reshape_mask(mask, size, bs, num_tokens)
+            mask_downsample = cls.reshape_mask(mask, size, bs, num_tokens)
 
             outputs = []
             cond_outputs = []
@@ -156,7 +161,7 @@ class AttentionCouplePPM(ComfyNodeABC):
         m.set_model_attn2_patch(attn2_patch)
         m.set_model_attn2_output_patch(attn2_output_patch)
 
-        return (m,)
+        return io.NodeOutput(m)
 
     @staticmethod
     def reshape_mask(mask: torch.Tensor, size: tuple[int, int], bs: int, num_tokens: int) -> torch.Tensor:
@@ -176,10 +181,4 @@ class AttentionCouplePPM(ComfyNodeABC):
         return (cond_k, cond_v) if cond_k.shape == cond_v.shape else (cond, cond)
 
 
-NODE_CLASS_MAPPINGS = {
-    "AttentionCouplePPM": AttentionCouplePPM,
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "AttentionCouplePPM": "Attention Couple (PPM)",
-}
+NODES = [AttentionCouplePPM]

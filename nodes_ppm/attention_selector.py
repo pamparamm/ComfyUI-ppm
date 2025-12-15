@@ -1,38 +1,39 @@
 from typing import Callable
 
-from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
 from comfy.ldm.modules import attention as attn
 from comfy.model_patcher import ModelPatcher
 from comfy.sd import CLIP
+from comfy_api.latest import io
+
+ATTENTIONS = ["optimized"]
 
 
-class ModelAttentionSelector(ComfyNodeABC):
+class ModelAttentionSelector(io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(cls) -> InputTypeDict:
-        return {
-            "required": {
-                "model": (IO.MODEL, {}),
-                "attention": (
-                    IO.COMBO,
-                    {
-                        "default": cls.ATTENTION_OPTIMIZED,
-                        "options": cls.ATTENTION_NAMES,
-                    },
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="ModelAttentionSelector",
+            display_name="Model Attention Selector",
+            category="advanced/model",
+            description="Replaces diffusion model's attention with another registered attention function",
+            inputs=[
+                io.Model.Input("model"),
+                io.Combo.Input(
+                    "attention",
+                    options=ATTENTIONS,
+                    default=ATTENTIONS[0],
                 ),
-            }
-        }
+            ],
+            outputs=[
+                io.Model.Output(),
+            ],
+        )
 
-    RETURN_TYPES = (IO.MODEL,)
-    FUNCTION = "patch"
+    @classmethod
+    def execute(cls, **kwargs) -> io.NodeOutput:
+        model: ModelPatcher = kwargs["model"]
+        attention: str = kwargs["attention"]
 
-    CATEGORY = "advanced/model"
-    EXPERIMENTAL = True
-    DESCRIPTION = "Replaces diffusion model's attention with another registered attention function"
-
-    ATTENTION_OPTIMIZED = "optimized"
-    ATTENTION_NAMES = [ATTENTION_OPTIMIZED, *attn.REGISTERED_ATTENTION_FUNCTIONS.keys()]
-
-    def patch(self, model: ModelPatcher, attention: str):
         m = model.clone()
 
         attention_function: Callable = attn.get_attention_function(attention)  # type: ignore
@@ -44,36 +45,35 @@ class ModelAttentionSelector(ComfyNodeABC):
         options["optimized_attention_override"] = attention_override
         m.model_options["transformer_options"] = options
 
-        return (m,)
+        return io.NodeOutput(m)
 
 
-class CLIPAttentionSelector(ComfyNodeABC):
+class CLIPAttentionSelector(io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(cls) -> InputTypeDict:
-        return {
-            "required": {
-                "clip": (IO.CLIP, {}),
-                "attention": (
-                    IO.COMBO,
-                    {
-                        "default": cls.ATTENTION_OPTIMIZED,
-                        "options": cls.ATTENTION_NAMES,
-                    },
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="CLIPAttentionSelector",
+            display_name="CLIP Attention Selector",
+            category="advanced/model",
+            description="Replaces text model's attention with another registered attention function",
+            inputs=[
+                io.Clip.Input("clip"),
+                io.Combo.Input(
+                    "attention",
+                    options=ATTENTIONS,
+                    default=ATTENTIONS[0],
                 ),
-            }
-        }
+            ],
+            outputs=[
+                io.Clip.Output(),
+            ],
+        )
 
-    RETURN_TYPES = (IO.CLIP,)
-    FUNCTION = "patch"
+    @classmethod
+    def execute(cls, **kwargs) -> io.NodeOutput:
+        clip: CLIP = kwargs["clip"]
+        attention: str = kwargs["attention"]
 
-    CATEGORY = "advanced/model"
-    EXPERIMENTAL = True
-    DESCRIPTION = "Replaces text model's attention with another registered attention function"
-
-    ATTENTION_OPTIMIZED = "optimized"
-    ATTENTION_NAMES = [ATTENTION_OPTIMIZED, *attn.REGISTERED_ATTENTION_FUNCTIONS.keys()]
-
-    def patch(self, clip: CLIP, attention: str):
         c = clip.clone()
         patcher = c.patcher
 
@@ -86,15 +86,11 @@ class CLIPAttentionSelector(ComfyNodeABC):
         options["optimized_attention_override"] = attention_override
         patcher.model_options["transformer_options"] = options
 
-        return (c,)
+        return io.NodeOutput(c)
 
 
-NODE_CLASS_MAPPINGS = {
-    "ModelAttentionSelector": ModelAttentionSelector,
-    "CLIPAttentionSelector": CLIPAttentionSelector,
-}
+def init():
+    ATTENTIONS.extend(attn.REGISTERED_ATTENTION_FUNCTIONS)
 
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "ModelAttentionSelector": "Model Attention Selector",
-    "CLIPAttentionSelector": "CLIP Attention Selector",
-}
+
+NODES = [ModelAttentionSelector, CLIPAttentionSelector]

@@ -7,11 +7,11 @@ from typing import Any
 import torch
 
 from comfy import model_management
-from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
 from comfy.model_base import Flux, HunyuanVideo
 from comfy.model_patcher import ModelPatcher
 from comfy.sd import CLIP
 from comfy.sd1_clip import SDClipModel, gen_empty_tokens
+from comfy_api.latest import io
 
 from ..compat.advanced_encode import patch_adv_encode
 from ..dit.flux_negpip import flux_forward_orig_negpip
@@ -105,22 +105,27 @@ def encode_token_weights_negpip(self: SDClipModel, token_weight_pairs):
     return r
 
 
-class CLIPNegPip(ComfyNodeABC):
+class CLIPNegPip(io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(cls) -> InputTypeDict:
-        return {
-            "required": {
-                "model": (IO.MODEL, {}),
-                "clip": (IO.CLIP, {}),
-            }
-        }
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="CLIPNegPip",
+            display_name="CLIP NegPip",
+            category="conditioning",
+            inputs=[
+                io.Model.Input("model"),
+                io.Clip.Input("clip"),
+            ],
+            outputs=[
+                io.Model.Output(),
+                io.Clip.Output(),
+            ],
+        )
 
-    RETURN_TYPES = (IO.MODEL, IO.CLIP)
-    FUNCTION = "patch"
-
-    CATEGORY = "conditioning"
-
-    def patch(self, model: ModelPatcher, clip: CLIP):
+    @classmethod
+    def execute(cls, **kwargs) -> io.NodeOutput:
+        model: ModelPatcher = kwargs["model"]
+        clip: CLIP = kwargs["clip"]
         m = model.clone()
         c = clip.clone()
         model_options: dict[str, Any] = m.model_options
@@ -128,7 +133,7 @@ class CLIPNegPip(ComfyNodeABC):
 
         encoders = [e for e in SUPPORTED_ENCODERS if hasattr(c.patcher.model, e)]
         if len(encoders) == 0:
-            return (m, c)
+            return io.NodeOutput(m, c)
 
         patch_adv_encode()
 
@@ -142,9 +147,9 @@ class CLIPNegPip(ComfyNodeABC):
             m.set_model_attn2_patch(negpip_attn)
             model_options[NEGPIP_OPTION] = True
             clip_options[NEGPIP_OPTION] = True
-            self.patch_dit(m, c)
+            cls.patch_dit(m, c)
 
-        return (m, c)
+        return io.NodeOutput(m, c)
 
     @staticmethod
     def patch_dit(m: ModelPatcher, c: CLIP):
@@ -165,10 +170,4 @@ class CLIPNegPip(ComfyNodeABC):
             )
 
 
-NODE_CLASS_MAPPINGS = {
-    "CLIPNegPip": CLIPNegPip,
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "CLIPNegPip": "CLIP NegPip",
-}
+NODES = [CLIPNegPip]

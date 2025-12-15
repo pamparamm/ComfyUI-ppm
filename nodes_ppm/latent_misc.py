@@ -132,6 +132,7 @@ class LatentToMaskBB(ComfyNodeABC):
         return (mask.unsqueeze(0),)
 
 
+# TODO Migrate to io.Autogrow.TemplatePrefix
 class MaskCompositePPM(ComfyNodeABC):
     @classmethod
     def INPUT_TYPES(cls) -> InputTypeDict:

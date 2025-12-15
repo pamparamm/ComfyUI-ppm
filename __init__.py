@@ -1,5 +1,11 @@
+from typing_extensions import override
+
+from comfy_api.latest import ComfyExtension, io
+
+from .compat.utils import v3_schema_stub
 from .nodes_ppm import (
     attention_couple_ppm,
+    attention_selector,
     clip_misc,
     clip_negpip,
     freeu_adv,
@@ -8,40 +14,32 @@ from .nodes_ppm import (
     latent_tonemap,
     misc,
     samplers,
-    vae,
-    attention_selector,
 )
 from .schedulers import inject_schedulers
 
 WEB_DIRECTORY = "./js"
 
-NODE_CLASS_MAPPINGS = {
-    **attention_couple_ppm.NODE_CLASS_MAPPINGS,
-    **clip_misc.NODE_CLASS_MAPPINGS,
-    **clip_negpip.NODE_CLASS_MAPPINGS,
-    **freeu_adv.NODE_CLASS_MAPPINGS,
-    **guidance.NODE_CLASS_MAPPINGS,
-    **latent_misc.NODE_CLASS_MAPPINGS,
-    **latent_tonemap.NODE_CLASS_MAPPINGS,
-    **misc.NODE_CLASS_MAPPINGS,
-    **samplers.NODE_CLASS_MAPPINGS,
-    **vae.NODE_CLASS_MAPPINGS,
-    **attention_selector.NODE_CLASS_MAPPINGS,
-}
 
-NODE_DISPLAY_NAME_MAPPINGS = {
-    **attention_couple_ppm.NODE_DISPLAY_NAME_MAPPINGS,
-    **clip_misc.NODE_DISPLAY_NAME_MAPPINGS,
-    **clip_negpip.NODE_DISPLAY_NAME_MAPPINGS,
-    **freeu_adv.NODE_DISPLAY_NAME_MAPPINGS,
-    **guidance.NODE_DISPLAY_NAME_MAPPINGS,
-    **latent_misc.NODE_DISPLAY_NAME_MAPPINGS,
-    **latent_tonemap.NODE_DISPLAY_NAME_MAPPINGS,
-    **misc.NODE_DISPLAY_NAME_MAPPINGS,
-    **samplers.NODE_DISPLAY_NAME_MAPPINGS,
-    **vae.NODE_DISPLAY_NAME_MAPPINGS,
-    **attention_selector.NODE_DISPLAY_NAME_MAPPINGS,
-}
+class PPMExtension(ComfyExtension):
+    @override
+    async def get_node_list(self) -> list[type[io.ComfyNode]]:
+        # TODO convert more nodes to v3
+        return [
+            *attention_couple_ppm.NODES,
+            *attention_selector.NODES,
+            *v3_schema_stub(clip_misc),
+            *clip_negpip.NODES,
+            *v3_schema_stub(freeu_adv),
+            *v3_schema_stub(guidance),
+            *v3_schema_stub(latent_misc),
+            *v3_schema_stub(latent_tonemap),
+            *v3_schema_stub(misc),
+            *v3_schema_stub(samplers),
+        ]
+
+    inject_schedulers()
+    attention_selector.init()
 
 
-inject_schedulers()
+async def comfy_entrypoint():  # ComfyUI calls this to load your extension and its nodes.
+    return PPMExtension()
