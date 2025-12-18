@@ -57,9 +57,18 @@ class AttentionCouplePPM(io.ComfyNode):
         dtype = m.model.diffusion_model.dtype
         device = comfy.model_management.get_torch_device()
 
-        num_conds = len(kwargs) // 2 + 1
-        cond_inputs: list[list[list]] = [kwargs[f"cond_{i}"] for i in range(1, num_conds)]
-        mask_inputs: list[torch.Tensor] = [kwargs[f"mask_{i}"] for i in range(1, num_conds)]
+        cond_inputs = []
+        mask_inputs = []
+        for i in itertools.count(1):
+            c_key = f"cond_{i}"
+            m_key = f"mask_{i}"
+            if c_key in kwargs and m_key in kwargs:
+                cond_inputs.append(kwargs[c_key])
+                mask_inputs.append(kwargs[m_key])
+            else:
+                break
+        
+        num_conds = len(cond_inputs) + 1
 
         mask = [base_mask] + mask_inputs
         mask = torch.stack(mask, dim=0).to(device, dtype=dtype)
