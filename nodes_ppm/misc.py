@@ -1,52 +1,135 @@
+from enum import Enum
+from typing import TypedDict
 import torch
 
-from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
+from comfy.model_base import BaseModel
 from comfy.model_patcher import ModelPatcher
 from comfy.model_sampling import ModelSamplingDiscrete
+from comfy_api.latest import io
 
 
-class ConvertTimestepToSigma(ComfyNodeABC):
+class ConvertTimestepToSigma(io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(cls) -> InputTypeDict:
-        return {
-            "required": {
-                "model": (IO.MODEL, {}),
-                "mode": (IO.COMBO, {"default": "percent", "options": ["none", "percent", "schedule_step"]}),
-            },
-            "optional": {
-                "percent": (IO.FLOAT, {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}),
-                "schedule_sigmas": (IO.SIGMAS, {}),
-                "schedule_step": (IO.INT, {"default": 0, "min": 0, "max": 999}),
-            },
-        }
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="ConvertTimestepToSigma",
+            display_name="Convert Timestep To Sigma",
+            category="sampling/custom_sampling/sigmas",
+            inputs=[
+                io.Model.Input("model"),
+                io.DynamicCombo.Input(
+                    "mode",
+                    options=[
+                        io.DynamicCombo.Option(
+                            cls.ModeType.PERCENT,
+                            [
+                                io.Float.Input("percent", default=0.0, min=0.0, max=1.0, step=0.0001),
+                                io.Boolean.Input(
+                                    "return_actual_sigma",
+                                    default=False,
+                                    tooltip="Return the actual sigma value instead of the value used for interval checks.\nThis only affects results at 0.0 and 1.0.",
+                                ),
+                            ],
+                        ),
+                        io.DynamicCombo.Option(
+                            cls.ModeType.SCHEDULE_STEP,
+                            [
+                                io.Sigmas.Input("schedule_sigmas"),
+                                io.Int.Input("schedule_step", default=0, min=0, max=999),
+                            ],
+                        ),
+                    ],
+                ),
+            ],
+            outputs=[
+                io.Float.Output(),
+            ],
+        )
 
-    RETURN_TYPES = (IO.FLOAT,)
-    FUNCTION = "convert"
-    CATEGORY = "sampling/custom_sampling/sigmas"
+    CONVERT_MODES = ["percent", "schedule_step"]
 
-    def convert(
-        self,
-        model: ModelPatcher,
-        mode: str,
-        percent: float = 0.0,
-        schedule_sigmas: list[torch.Tensor] = [],
-        schedule_step: int = 0,
-    ):
+    @classmethod
+    def execute(cls, **kwargs) -> io.NodeOutput:
+        model: ModelPatcher = kwargs["model"]
+        mode: dict = kwargs["mode"]
+        selected_mode = mode["mode"]
+
         model_sampling: ModelSamplingDiscrete = model.get_model_object("model_sampling")  # type: ignore
         sigma = -1.0
 
-        if mode == "percent":
+        if selected_mode == "percent":
+            percent: float = mode["percent"]
+            return_actual_sigma: bool = mode["return_actual_sigma"]
             sigma = model_sampling.percent_to_sigma(percent)
-        elif mode == "schedule_step" and schedule_sigmas is not None:
+            if return_actual_sigma:
+                if percent == 0.0:
+                    sigma = model_sampling.sigma_max.item()
+                elif percent == 1.0:
+                    sigma = model_sampling.sigma_min.item()
+        elif selected_mode == "schedule_step":
+            schedule_sigmas: list[torch.Tensor] = mode["schedule_sigmas"]
+            schedule_step: int = mode["schedule_step"]
             sigma = schedule_sigmas[schedule_step]
 
-        return (sigma,)
+        return io.NodeOutput(sigma)
+
+    class ModeType(str, Enum):
+        PERCENT = "percent"
+        SCHEDULE_STEP = "schedule_step"
 
 
-NODE_CLASS_MAPPINGS = {
-    "ConvertTimestepToSigma": ConvertTimestepToSigma,
-}
+class EpsilonScalingPPM(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="EpsilonScalingPPM",
+            display_name="Epsilon Scaling (PPM)",
+            category="model_patches/unet",
+            inputs=[
+                io.Model.Input("model"),
+                io.Float.Input(
+                    "scaling_factor",
+                    default=1.005,
+                    min=0.5,
+                    max=1.5,
+                    step=0.001,
+                    display_mode=io.NumberDisplay.number,
+                ),
+            ],
+            outputs=[
+                io.Model.Output(),
+            ],
+        )
 
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "ConvertTimestepToSigma": "Convert Timestep To Sigma",
-}
+    @classmethod
+    def execute(cls, **kwargs) -> io.NodeOutput:
+        model: ModelPatcher = kwargs["model"]
+        scaling_factor: float = kwargs["scaling_factor"]
+
+        if scaling_factor == 0:
+            scaling_factor = 1e-9
+
+        def epsilon_scaling_function(args):
+            model: BaseModel = args["model"]
+            x_cfg = args["denoised"]
+            x = args["input"]
+            sigma = args["sigma"]
+
+            model_sampling: ModelSamplingDiscrete = model.model_sampling
+            zsnr = getattr(model_sampling, "zsnr", False)
+
+            if zsnr and sigma >= model_sampling.sigma_max:
+                return x_cfg
+
+            noise_pred = x - x_cfg
+            scaled_noise_pred = noise_pred / scaling_factor
+            new_denoised = x - scaled_noise_pred
+
+            return new_denoised
+
+        m = model.clone()
+        m.set_model_sampler_post_cfg_function(epsilon_scaling_function)
+        return io.NodeOutput(m)
+
+
+NODES = [ConvertTimestepToSigma, EpsilonScalingPPM]

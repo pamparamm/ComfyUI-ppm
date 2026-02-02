@@ -18,9 +18,8 @@ Supports:
 
 - SD1
 - SDXL
-- FLUX
-- HunyuanVideo
-- HunyuanVideoI2V
+- Anima
+- ~~FLUX~~ Unmaintained
 
 Modified implementation of NegPiP by [laksjdjf](https://github.com/laksjdjf) and [hako-mikan](https://github.com/hako-mikan). It uses ModelPatcher instead of monkey-patching, which should increase compatibility with other nodes.
 
@@ -43,6 +42,9 @@ You can read more about NegPiP [in the original repo](https://github.com/hako-mi
 >
 > See "attention_couple+negpip" and "attention_couple_with_global_prompt" from ComfyUI's "Browse Templates" menu.
 
+> [!NOTE]
+> You can also use the version from [ComfyUI prompt control](https://github.com/asagi4/comfyui-prompt-control/) ([doc](https://github.com/asagi4/comfyui-prompt-control/blob/master/doc/attention_couple.md)) - it has a convenient prompt-based approach that doesn't require to add new `cond`/`mask` nodes for each new region.
+
 Modified implementation of AttentionCouple by [laksjdjf](https://github.com/laksjdjf) and [Haoming02](https://github.com/Haoming02), made to be more compatible with other custom nodes.
 
 Inputs for new regions are managed automatically: when you attach cond/mask of a region to the node, a new `cond_` / `mask_` input appears. Link `base_cond` input to the `positive` conditioning used in `KSampler`/`SamplerCustom`.
@@ -50,6 +52,10 @@ Inputs for new regions are managed automatically: when you attach cond/mask of a
 You can use multiple `LatentToMaskBB` nodes to set bounding boxes for `AttentionCouplePPM`. The parameters are relative to your initial latent: `x=0.5, y=0.0, w=0.5, h=1.0` will produce a mask covering the right half of the image.
 
 You can adjust mask values to set region strength and use `ConditioningSetAreaStrength` to increase/decrease conditioning strength.
+
+### Attention Selectors
+
+`Model Attention Selector` and `CLIP Attention Selector` nodes, can be used to swap the optimized attention algorithm, such as pytorch (SDPA), sage (SageAttention), xformers, etc., without restarting ComfyUI.
 
 ### DynSamplerSelect
 
@@ -70,6 +76,14 @@ Should greatly reduce overexposure effect. Use together with `SamplerCustom` nod
 Implementation of [Applying Guidance in a Limited Interval Improves Sample and Distribution Quality in Diffusion Models by Kynkäänniemi et al.](https://arxiv.org/abs/2404.07724) as a post CFG function.
 
 Guidance Limiter is also available as a `CFGLimiterGuider` guider node for `SamplerCustomAdvanced`.
+
+### Epsilon Scaling (PPM)
+
+Modified version of ComfyUI's `Epsilon Scaling` node with a hacky (and mathematically incorrect) support for v-pred ZSNR models.
+
+### Tile Preprocessor (PPM)
+
+Image preprocessor for ControlNet Tile that doesn't require any third-party libraries (aside from `kornia`, which is a part of ComfyUI's requirements).
 
 ### Post-CFG nodes
 

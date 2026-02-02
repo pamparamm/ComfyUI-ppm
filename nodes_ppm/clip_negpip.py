@@ -7,18 +7,21 @@ from typing import Any
 import torch
 
 from comfy import model_management
-from comfy.model_base import Flux, HunyuanVideo
+from comfy.ldm.anima.model import Anima as AnimaDIT
+from comfy.ldm.cosmos.predict2 import Attention as CosmosAttention
+from comfy.model_base import SDXL, Anima, BaseModel, Flux, SDXLRefiner
 from comfy.model_patcher import ModelPatcher
 from comfy.sd import CLIP
 from comfy.sd1_clip import SDClipModel, gen_empty_tokens
 from comfy_api.latest import io
 
 from ..compat.advanced_encode import patch_adv_encode
-from ..dit.flux_negpip import flux_forward_orig_negpip
-from ..dit.hunyuan_video_negpip import (
-    hunyuan_video_clip_encode_token_weights_negpip,
-    hunyuan_video_forward_orig_negpip,
+from ..dit.anima_negpip import (
+    anima_extra_conds_negpip,
+    anima_forward_negpip,
+    cosmos_attention_forward_negpip,
 )
+from ..dit.flux_negpip import flux_forward_orig_negpip
 
 NEGPIP_OPTION = "ppm_negpip"
 SUPPORTED_ENCODERS = [
@@ -26,6 +29,7 @@ SUPPORTED_ENCODERS = [
     "clip_l",
     "t5xxl",
     "llama",
+    "qwen3_06b",
 ]
 
 
@@ -135,39 +139,65 @@ class CLIPNegPip(io.ComfyNode):
         if len(encoders) == 0:
             return io.NodeOutput(m, c)
 
-        patch_adv_encode()
-
         if not has_negpip(model_options):
+            patch_adv_encode()
+            is_patched = cls.patch_negpip(m, c, encoders)
+
+            if is_patched:
+                model_options[NEGPIP_OPTION] = True
+                clip_options[NEGPIP_OPTION] = True
+
+        return io.NodeOutput(m, c)
+
+    @staticmethod
+    def patch_negpip(m: ModelPatcher, c: CLIP, encoders: list[str]):
+        model_type = type(m.model)
+        diffusion_model = m.model.diffusion_model
+
+        # SD1.* and SDXL
+        if issubclass(model_type, SDXL) or issubclass(model_type, SDXLRefiner) or model_type == BaseModel:
             for encoder in encoders:
                 c.patcher.add_object_patch(
                     f"{encoder}.encode_token_weights",
                     partial(encode_token_weights_negpip, getattr(c.patcher.model, encoder)),
                 )
-
             m.set_model_attn2_patch(negpip_attn)
-            model_options[NEGPIP_OPTION] = True
-            clip_options[NEGPIP_OPTION] = True
-            cls.patch_dit(m, c)
+            return True
 
-        return io.NodeOutput(m, c)
+        # Flux (probably broken)
+        if issubclass(model_type, Flux):
+            for encoder in encoders:
+                c.patcher.add_object_patch(
+                    f"{encoder}.encode_token_weights",
+                    partial(encode_token_weights_negpip, getattr(c.patcher.model, encoder)),
+                )
+            m.add_object_patch("diffusion_model.forward_orig", partial(flux_forward_orig_negpip, diffusion_model))
+            return True
 
-    @staticmethod
-    def patch_dit(m: ModelPatcher, c: CLIP):
-        diffusion_model = type(m.model)
-
-        if issubclass(diffusion_model, Flux):
+        # Anima
+        if issubclass(model_type, Anima):
+            diffusion_model: AnimaDIT
             m.add_object_patch(
-                "diffusion_model.forward_orig", partial(flux_forward_orig_negpip, m.model.diffusion_model)
-            )
-        if issubclass(diffusion_model, HunyuanVideo):
-            c.patcher.add_object_patch(
-                "encode_token_weights",
-                partial(hunyuan_video_clip_encode_token_weights_negpip, c.patcher.model),
+                "extra_conds",
+                partial(anima_extra_conds_negpip, m.model),
             )
             m.add_object_patch(
-                "diffusion_model.forward_orig",
-                partial(hunyuan_video_forward_orig_negpip, m.model.diffusion_model),
+                "diffusion_model._forward",
+                partial(anima_forward_negpip, diffusion_model._forward),
             )
+
+            for block_name, block in (
+                (n, b)
+                for n, b in diffusion_model.named_modules()
+                if "cross_attn" in n and isinstance(b, CosmosAttention)
+            ):
+                m.add_object_patch(
+                    f"diffusion_model.{block_name}.forward", partial(cosmos_attention_forward_negpip, block)
+                )
+
+            return True
+
+        return False
 
 
 NODES = [CLIPNegPip]

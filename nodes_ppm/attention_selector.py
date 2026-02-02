@@ -18,11 +18,7 @@ class ModelAttentionSelector(io.ComfyNode):
             description="Replaces diffusion model's attention with another registered attention function",
             inputs=[
                 io.Model.Input("model"),
-                io.Combo.Input(
-                    "attention",
-                    options=ATTENTIONS,
-                    default=ATTENTIONS[0],
-                ),
+                io.Combo.Input("attention", options=ATTENTIONS, default=ATTENTIONS[0]),
             ],
             outputs=[
                 io.Model.Output(),
@@ -58,11 +54,7 @@ class CLIPAttentionSelector(io.ComfyNode):
             description="Replaces text model's attention with another registered attention function",
             inputs=[
                 io.Clip.Input("clip"),
-                io.Combo.Input(
-                    "attention",
-                    options=ATTENTIONS,
-                    default=ATTENTIONS[0],
-                ),
+                io.Combo.Input("attention", options=ATTENTIONS, default=ATTENTIONS[0]),
             ],
             outputs=[
                 io.Clip.Output(),

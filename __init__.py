@@ -10,6 +10,7 @@ from .nodes_ppm import (
     clip_negpip,
     freeu_adv,
     guidance,
+    image_misc,
     latent_misc,
     latent_tonemap,
     misc,
@@ -31,9 +32,10 @@ class PPMExtension(ComfyExtension):
             *clip_negpip.NODES,
             *v3_schema_stub(freeu_adv),
             *v3_schema_stub(guidance),
+            *image_misc.NODES,
             *v3_schema_stub(latent_misc),
             *v3_schema_stub(latent_tonemap),
-            *v3_schema_stub(misc),
+            *misc.NODES,
             *v3_schema_stub(samplers),
         ]
 
