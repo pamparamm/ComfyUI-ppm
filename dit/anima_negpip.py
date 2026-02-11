@@ -6,45 +6,34 @@ import torch
 import comfy.conds
 from comfy.ldm.cosmos.predict2 import Attention as CosmosAttention
 from comfy.ldm.cosmos.predict2 import apply_rotary_pos_emb
-from comfy.model_base import Anima
 
 
 def anima_extra_conds_negpip(
-    self: Anima,
+    extra_conds: Callable[..., dict],
     **kwargs,
 ):
-    out = super(Anima, self).extra_conds(**kwargs)
-    cross_attn = kwargs.get("cross_attn", None)
-    t5xxl_ids = kwargs.get("t5xxl_ids", None)
     t5xxl_weights = kwargs.get("t5xxl_weights", None)
-    device = kwargs["device"]
-    if cross_attn is not None:
-        if t5xxl_ids is not None:
-            cross_attn = self.diffusion_model.preprocess_text_embeds(  # pyright: ignore[reportCallIssue]
-                cross_attn.to(device=device, dtype=self.get_dtype()), t5xxl_ids.unsqueeze(0).to(device=device)
-            )
-            negpip_mask = torch.ones_like(cross_attn)
+    negpip_mask = None
+    if t5xxl_weights is not None:
+        t5xxl_weights_abs = torch.abs(t5xxl_weights)
 
-            if t5xxl_weights is not None:
-                t5xxl_weights: torch.Tensor = t5xxl_weights.unsqueeze(0).unsqueeze(-1).to(cross_attn)
-                t5xxl_weights_abs = torch.abs(t5xxl_weights)
+        negpip_mask = (t5xxl_weights == t5xxl_weights_abs).int()
+        negpip_mask[negpip_mask == 0] = -1
+        negpip_mask = negpip_mask.unsqueeze(0).unsqueeze(-1)
 
-                negpip_mask = (t5xxl_weights == t5xxl_weights_abs).int()
-                negpip_mask[negpip_mask == 0] = -1
+        if negpip_mask.shape[1] < 512:
+            negpip_mask = torch.nn.functional.pad(negpip_mask, (0, 0, 0, 512 - negpip_mask.shape[1]), value=1.0)
 
-                cross_attn *= t5xxl_weights_abs
+        kwargs["t5xxl_weights"] = t5xxl_weights_abs
 
-            if cross_attn.shape[1] < 512:
-                cross_attn = torch.nn.functional.pad(cross_attn, (0, 0, 0, 512 - cross_attn.shape[1]))
-                negpip_mask = torch.nn.functional.pad(negpip_mask, (0, 0, 0, 512 - negpip_mask.shape[1]), value=1)
+    out = extra_conds(**kwargs)
+    if negpip_mask is not None:
+        out["c_negpip_mask"] = comfy.conds.CONDRegular(negpip_mask)
 
-            out["c_negpip_mask"] = comfy.conds.CONDRegular(negpip_mask)
-
-        out["c_crossattn"] = comfy.conds.CONDRegular(cross_attn)
     return out
 
 
-def anima_forward_negpip(
+def cosmos_forward_negpip(
     _forward: Callable[..., torch.Tensor],
     x: torch.Tensor,
     timesteps: torch.Tensor,

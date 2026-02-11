@@ -30,6 +30,17 @@ def get_special_tokens_map(clip: CLIP) -> dict[str, set[int]]:
     return special_tokens_map
 
 
+def get_token_dictionaries(clip: CLIP) -> dict[str, dict[int, str]]:
+    tokenizers: list[SDTokenizer] = [t for t in clip.tokenizer.__dict__.values() if isinstance(t, SDTokenizer)]
+    token_dictionaries: dict[str, dict[int, str]] = {}
+    for tokenizer in tokenizers:
+        t_key = tokenizer.embedding_key.replace("clip_", "")
+        inv_vocab: dict[int, str] = tokenizer.inv_vocab
+        token_dictionaries[t_key] = inv_vocab
+
+    return token_dictionaries
+
+
 class CLIPTextEncodeBREAK(ComfyNodeABC):
     @classmethod
     def INPUT_TYPES(cls) -> InputTypeDict:
@@ -113,18 +124,21 @@ class CLIPTokenCounter(ComfyNodeABC):
     RETURN_TYPES = (
         IO.STRING,
         IO.STRING,
+        IO.STRING,
     )
     RETURN_NAMES = (
         "count",
         "count_advanced",
+        "parsed_tokens",
     )
     FUNCTION = "count"
 
     OUTPUT_NODE = True
 
     def count(self, clip: CLIP, text: str):
-        special_tokens_map: dict[str, set[int]] = get_special_tokens_map(clip)
-        tokens_map: dict[str, list[list[int]]] = dict((key, []) for key in special_tokens_map.keys())
+        special_tokens_map = get_special_tokens_map(clip)
+        token_dictionaries = get_token_dictionaries(clip)
+        tokens_map: dict[str, list[list[tuple[int, str]]]] = dict((key, []) for key in special_tokens_map.keys())
 
         prompts = self._parse_prompts(text)
         for prompt in prompts:
@@ -133,29 +147,31 @@ class CLIPTokenCounter(ComfyNodeABC):
                 for key, tokens in [
                     (key, tokens[0]) for key, tokens in tokenizer_results.items() if key in special_tokens_map
                 ]:
-                    prompt_tokens = [t for t in tokens if t[0] not in special_tokens_map[key]]
+                    prompt_tokens = [
+                        (t[0], token_dictionaries[key][t[0]]) for t in tokens if t[0] not in special_tokens_map[key]
+                    ]
                     tokens_map[key].append(prompt_tokens)
 
         count_map = self._get_count(tokens_map)
-        return (self._prettify_count(count_map), json.dumps(count_map))
+        return (self._format_count(count_map), self._dump(count_map), self._format_tokens(tokens_map))
 
-    @staticmethod
-    def _get_count(tokens_map: dict[str, list[list[int]]]) -> dict[str, list[int]]:
-        count: dict[str, list[int]] = {}
-        for key, prompt_tokens in tokens_map.items():
-            count[key] = [len(t) for t in prompt_tokens]
-        return count
-
-    @staticmethod
+    @classmethod
     # TODO Rewrite into more robust function
-    def _parse_prompts(text: str) -> list[str]:
+    def _parse_prompts(cls, text: str) -> list[str]:
         text = re.sub(r"STYLE\(.*?\)", "", text)  # sanitize prompt_control STYLE(*)
         text = re.sub(r"\[(.*?)(\:.*?)+\]", r"\g<1>", text)  # replace prompt_control brackets
         prompts = text.split("BREAK")  # split text by BREAK keyword
         return prompts
 
-    @staticmethod
-    def _prettify_count(count_map: dict[str, list[int]]) -> str:
+    @classmethod
+    def _get_count(cls, tokens_map: dict[str, list[list[tuple[int, str]]]]) -> dict[str, list[int]]:
+        count: dict[str, list[int]] = {}
+        for key, prompt_tokens in tokens_map.items():
+            count[key] = [len(t) for t in prompt_tokens]
+        return count
+
+    @classmethod
+    def _format_count(cls, count_map: dict[str, list[int]]) -> str:
         if len(count_map) == 0:
             return "0"
         count_key_to_clip: dict[str, list[str]] = {}
@@ -170,7 +186,16 @@ class CLIPTokenCounter(ComfyNodeABC):
             if len(count_simple) > 0:
                 return count_simple
             return "0"
-        return json.dumps(count_map)  # fallback to json dump
+        return cls._dump(count_map)  # fallback to json dump
+
+    @classmethod
+    def _format_tokens(cls, tokens_map: dict[str, list[list[tuple[int, str]]]]) -> str:
+        formatted_map = dict(((k, [[f"`{t[1]}` ({t[0]})`" for t in p] for p in v]) for k, v in tokens_map.items()))
+        return cls._dump(formatted_map)
+
+    @classmethod
+    def _dump(cls, count_map: dict) -> str:
+        return json.dumps(count_map, indent=2)
 
 
 class ConditioningZeroOutCombine(ComfyNodeABC):

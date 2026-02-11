@@ -9,6 +9,7 @@ import torch
 from comfy import model_management
 from comfy.ldm.anima.model import Anima as AnimaDIT
 from comfy.ldm.cosmos.predict2 import Attention as CosmosAttention
+from comfy.ldm.flux.model import Flux as FluxDIT
 from comfy.model_base import SDXL, Anima, BaseModel, Flux, SDXLRefiner
 from comfy.model_patcher import ModelPatcher
 from comfy.sd import CLIP
@@ -18,8 +19,8 @@ from comfy_api.latest import io
 from ..compat.advanced_encode import patch_adv_encode
 from ..dit.anima_negpip import (
     anima_extra_conds_negpip,
-    anima_forward_negpip,
     cosmos_attention_forward_negpip,
+    cosmos_forward_negpip,
 )
 from ..dit.flux_negpip import flux_forward_orig_negpip
 
@@ -166,30 +167,29 @@ class CLIPNegPip(io.ComfyNode):
 
         # Flux (probably broken)
         if issubclass(model_type, Flux):
+            flux_model: FluxDIT = diffusion_model
             for encoder in encoders:
                 c.patcher.add_object_patch(
                     f"{encoder}.encode_token_weights",
                     partial(encode_token_weights_negpip, getattr(c.patcher.model, encoder)),
                 )
-            m.add_object_patch("diffusion_model.forward_orig", partial(flux_forward_orig_negpip, diffusion_model))
+            m.add_object_patch("diffusion_model.forward_orig", partial(flux_forward_orig_negpip, flux_model))
             return True
 
         # Anima
         if issubclass(model_type, Anima):
-            diffusion_model: AnimaDIT
+            anima_model: AnimaDIT = diffusion_model
             m.add_object_patch(
                 "extra_conds",
-                partial(anima_extra_conds_negpip, m.model),
+                partial(anima_extra_conds_negpip, m.model.extra_conds),
             )
             m.add_object_patch(
                 "diffusion_model._forward",
-                partial(anima_forward_negpip, diffusion_model._forward),
+                partial(cosmos_forward_negpip, anima_model._forward),
             )
 
             for block_name, block in (
-                (n, b)
-                for n, b in diffusion_model.named_modules()
-                if "cross_attn" in n and isinstance(b, CosmosAttention)
+                (n, b) for n, b in anima_model.named_modules() if "cross_attn" in n and isinstance(b, CosmosAttention)
             ):
                 m.add_object_patch(
                     f"diffusion_model.{block_name}.forward", partial(cosmos_attention_forward_negpip, block)
