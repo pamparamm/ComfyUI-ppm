@@ -16,9 +16,13 @@ class ModuleInjector:
         self.modules = modules
 
     def patch(self, patch_func: Callable[[ModuleType], None]):
-        logging.info(f"{self.name} was patched by ComfyUI-ppm")
+        if len(self.modules) == 0:
+            return
+
         for module in self.modules:
             patch_func(module)
+
+        logging.info(f"{self.name} was patched by ComfyUI-ppm")
 
 
 # Based on init_external_custom_nodes method from nodes.py (ComfyUI)

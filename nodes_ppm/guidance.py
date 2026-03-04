@@ -156,7 +156,7 @@ class DynThresh:
         variability: Literal["AD", "STD"] = "AD",
         interpolate_phi: float = 1.0,
     ):
-        ### Now recenter the values relative to their average rather than absolute, to allow scaling from average
+        # Now recenter the values relative to their average rather than absolute, to allow scaling from average
         mim_flattened = x_mim.flatten(2)
         cfg_flattened = x_cfg.flatten(2)
         mim_means = mim_flattened.mean(dim=2).unsqueeze(2)
@@ -181,15 +181,15 @@ class DynThresh:
 
         if startpoint == "MEAN":
             if variability == "AD":
-                ### Get the maximum value of all datapoints (with an optional threshold percentile on the uncond)
+                # Get the maximum value of all datapoints (with an optional threshold percentile on the uncond)
                 max_scaleref = torch.maximum(mim_scaleref, cfg_scaleref)
-                ### Clamp to the max
+                # Clamp to the max
                 cfg_clamped = cfg_centered.clamp(-max_scaleref, max_scaleref)
-                ### Now shrink from the max to normalize and grow to the mimic scale (instead of the CFG scale)
+                # Now shrink from the max to normalize and grow to the mimic scale (instead of the CFG scale)
                 cfg_renormalized = (cfg_clamped / max_scaleref) * mim_scaleref
             elif variability == "STD":
                 cfg_renormalized = (cfg_centered / cfg_scaleref) * mim_scaleref
-            ### Now add it back onto the averages to get into real scale again and return
+            # Now add it back onto the averages to get into real scale again and return
             result = cfg_renormalized + cfg_means
         elif startpoint == "ZERO":
             scaling_factor = mim_scaleref / cfg_scaleref
