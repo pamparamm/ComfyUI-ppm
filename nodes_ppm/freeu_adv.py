@@ -2,127 +2,14 @@
 # code originally taken from: https://github.com/ChenyangSi/FreeU (under MIT License)
 
 import logging
-from functools import partial
+from typing import Any
 
 import torch
-import torch as th
 import torch.fft as fft
 
 from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
-from comfy.ldm.modules.diffusionmodules.openaimodel import apply_control, forward_timestep_embed
-from comfy.ldm.modules.diffusionmodules.util import timestep_embedding
 from comfy.model_patcher import ModelPatcher
 from comfy.model_sampling import ModelSamplingDiscrete
-
-
-def _forward(_self, x, timesteps=None, context=None, y=None, control=None, transformer_options={}, **kwargs):
-    """
-    Apply the model to an input batch.
-    :param x: an [N x C x ...] Tensor of inputs.
-    :param timesteps: a 1-D batch of timesteps.
-    :param context: conditioning plugged in via crossattn
-    :param y: an [N] Tensor of labels, if class-conditional.
-    :return: an [N x C x ...] Tensor of outputs.
-    """
-    transformer_options["original_shape"] = list(x.shape)
-    transformer_options["transformer_index"] = 0
-    transformer_patches = transformer_options.get("patches", {})
-
-    num_video_frames = kwargs.get("num_video_frames", _self.default_num_video_frames)
-    image_only_indicator = kwargs.get("image_only_indicator", getattr(_self, "default_image_only_indicator", None))
-    time_context = kwargs.get("time_context", None)
-
-    assert (y is not None) == (_self.num_classes is not None), (
-        "must specify y if and only if the model is class-conditional"
-    )
-    hs = []
-    t_emb = timestep_embedding(timesteps, _self.model_channels, repeat_only=False).to(x.dtype)
-    emb = _self.time_embed(t_emb)
-
-    if "emb_patch" in transformer_patches:
-        patch = transformer_patches["emb_patch"]
-        for p in patch:
-            emb = p(emb, _self.model_channels, transformer_options)
-
-    if _self.num_classes is not None:
-        assert y.shape[0] == x.shape[0]
-        emb = emb + _self.label_emb(y)
-
-    h = x
-    for id, module in enumerate(_self.input_blocks):
-        transformer_options["block"] = ("input", id)
-        h = forward_timestep_embed(
-            module,
-            h,
-            emb,
-            context,
-            transformer_options,
-            time_context=time_context,
-            num_video_frames=num_video_frames,
-            image_only_indicator=image_only_indicator,
-        )
-        h = apply_control(h, control, "input")
-        if "input_block_patch" in transformer_patches:
-            patch = transformer_patches["input_block_patch"]
-            for p in patch:
-                h = p(h, transformer_options)
-
-        hs.append(h)
-        if "input_block_patch_after_skip" in transformer_patches:
-            patch = transformer_patches["input_block_patch_after_skip"]
-            for p in patch:
-                h = p(h, transformer_options)
-
-    transformer_options["block"] = ("middle", 0)
-    h = forward_timestep_embed(
-        _self.middle_block,
-        h,
-        emb,
-        context,
-        transformer_options,
-        time_context=time_context,
-        num_video_frames=num_video_frames,
-        image_only_indicator=image_only_indicator,
-    )
-    h = apply_control(h, control, "middle")
-
-    if "middle_block_patch" in transformer_patches:
-        patch = transformer_patches["middle_block_patch"]
-        for p in patch:
-            h = p(h, transformer_options)
-
-    for id, module in enumerate(_self.output_blocks):
-        transformer_options["block"] = ("output", id)
-        hsp = hs.pop()
-        hsp = apply_control(hsp, control, "output")
-
-        if "output_block_patch" in transformer_patches:
-            patch = transformer_patches["output_block_patch"]
-            for p in patch:
-                h, hsp = p(h, hsp, transformer_options)
-
-        h = th.cat([h, hsp], dim=1)
-        del hsp
-        if len(hs) > 0:
-            output_shape = hs[-1].shape
-        else:
-            output_shape = None
-        h = forward_timestep_embed(
-            module,
-            h,
-            emb,
-            context,
-            transformer_options,
-            output_shape,
-            time_context=time_context,
-            num_video_frames=num_video_frames,
-            image_only_indicator=image_only_indicator,
-        )
-    h = h.type(x.dtype)
-    if _self.predict_codebook_ids:
-        return _self.id_predictor(h)
-    else:
-        return _self.out(h)
 
 
 def Fourier_filter(x, threshold, scale):
@@ -227,6 +114,10 @@ class FreeU2PPM(ComfyNodeABC):
                 h[:, :slice_b2] = h[:, :slice_b2] * ((b2 - 1) * hidden_mean + 1)
             return h
 
+        def block_after_patch_middle(kwargs: dict[str, Any]):
+            h = block_patch(kwargs["h"], kwargs["transformer_options"])
+            return {"h": h}
+
         def block_patch_hsp(h, hsp, transformer_options):
             sigma = transformer_options["sigmas"]
             if not (sigma_end < sigma[0] <= sigma_start):
@@ -241,7 +132,6 @@ class FreeU2PPM(ComfyNodeABC):
             return h, hsp
 
         m = model.clone()
-        m.add_object_patch("diffusion_model.forward", partial(_forward, m.model.diffusion_model))
         if output_block:
             logging.debug("Patching output block")
             m.set_model_output_block_patch(block_patch_hsp)
@@ -250,7 +140,7 @@ class FreeU2PPM(ComfyNodeABC):
             m.set_model_input_block_patch(block_patch)
         if middle_block:
             logging.debug("Patching middle block")
-            m.set_model_patch(block_patch, "middle_block_patch")
+            m.set_model_middle_block_after_patch(block_after_patch_middle)
         return (m,)
 
 
