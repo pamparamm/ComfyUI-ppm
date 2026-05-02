@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-ppm"
-description = "Fixed AttentionCouple, NegPip(negative weights in prompts) for SDXL, FLUX and HunyuanVideo, more CFG++ and SMEA DY samplers, etc."
-version = "1.1.4"
+description = "Attention Couple for SDXL and Anima; NegPiP (negative weights in prompts) for SDXL and Anima; etc."
+version = "1.1.5"
 license = { text = "GNU Affero General Public License v3" }
 
 [project.urls]

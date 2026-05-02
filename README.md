@@ -23,7 +23,7 @@ Supports:
 
 Modified implementation of NegPiP by [laksjdjf](https://github.com/laksjdjf) and [hako-mikan](https://github.com/hako-mikan). It uses ModelPatcher instead of monkey-patching, which should increase compatibility with other nodes.
 
-You can read more about NegPiP [in the original repo](https://github.com/hako-mikan/sd-webui-negpip). When used together with tag-based models, you should keep all commas inside weight braces (i.e. `(worst quality,:-1.3) (sketch,:-1.1)` instead of `(worst quality:-1.3), (sketch:-1.1),`).
+You can read more about NegPiP [in the original repo](https://github.com/hako-mikan/sd-webui-negpip). ~~When used together with tag-based models, you should keep all commas inside weight braces (i.e. `(worst quality,:-1.3) (sketch,:-1.1)` instead of `(worst quality:-1.3), (sketch:-1.1),`).~~ Some tag-based models (Illustrious/NoobAI) perform better with commas in braces, while other models (like Anima) perform better with commas outside of emphasis blocks - feel free to experiment.
 
 > [!NOTE]
 > `CLIPNegPip` is compatible with:
@@ -40,10 +40,18 @@ You can read more about NegPiP [in the original repo](https://github.com/hako-mi
 
 > [!TIP]
 >
+> Connect this node after other model patches (such as `CLIPNegPip`, `EasyCache`, `LazyCache`, etc.).
+>
 > See "attention_couple+negpip" and "attention_couple_with_global_prompt" from ComfyUI's "Browse Templates" menu.
 
 > [!NOTE]
 > You can also use the version from [ComfyUI prompt control](https://github.com/asagi4/comfyui-prompt-control/) ([doc](https://github.com/asagi4/comfyui-prompt-control/blob/master/doc/attention_couple.md)) - it has a convenient prompt-based approach that doesn't require to add new `cond`/`mask` nodes for each new region.
+
+Supports:
+
+- SD1
+- SDXL
+- Anima
 
 Modified implementation of AttentionCouple by [laksjdjf](https://github.com/laksjdjf) and [Haoming02](https://github.com/Haoming02), made to be more compatible with other custom nodes.
 

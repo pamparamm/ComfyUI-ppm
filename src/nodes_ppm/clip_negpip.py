@@ -35,7 +35,7 @@ SUPPORTED_ENCODERS = [
 ]
 
 
-def has_negpip(model_options: dict):
+def has_negpip(model_options: dict) -> bool:
     return model_options.get(NEGPIP_OPTION, False)
 
 
@@ -82,7 +82,7 @@ class CLIPNegPip(io.ComfyNode):
     @staticmethod
     def patch_negpip(m: ModelPatcher, c: CLIP, encoders: list[str]):
         model_type = type(m.model)
-        diffusion_model = m.model.diffusion_model
+        diffusion_model = m.get_model_object("diffusion_model")
 
         # SD1.* and SDXL
         if issubclass(model_type, SDXL) or issubclass(model_type, SDXLRefiner) or model_type == BaseModel:
@@ -96,7 +96,7 @@ class CLIPNegPip(io.ComfyNode):
 
         # Flux (probably broken)
         if issubclass(model_type, Flux):
-            flux_model: FluxDIT = diffusion_model
+            flux_model: FluxDIT = diffusion_model  # type: ignore
             for encoder in encoders:
                 c.patcher.add_object_patch(
                     f"{encoder}.encode_token_weights",
@@ -107,7 +107,7 @@ class CLIPNegPip(io.ComfyNode):
 
         # Anima
         if issubclass(model_type, Anima):
-            anima_model: AnimaDIT = diffusion_model
+            anima_model: AnimaDIT = diffusion_model  # type: ignore
             m.add_object_patch(
                 "extra_conds",
                 partial(anima_extra_conds_negpip, m.model.extra_conds),

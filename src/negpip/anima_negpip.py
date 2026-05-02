@@ -8,6 +8,10 @@ from comfy.ldm.cosmos.predict2 import Attention as CosmosAttention
 from comfy.ldm.cosmos.predict2 import apply_rotary_pos_emb
 
 
+COND_NEGPIP_MASK_KEY = "c_negpip_mask"
+NEGPIP_MASK_KEY = "negpip_mask"
+
+
 def anima_extra_conds_negpip(
     extra_conds: Callable[..., dict],
     **kwargs,
@@ -28,7 +32,7 @@ def anima_extra_conds_negpip(
 
     out = extra_conds(**kwargs)
     if negpip_mask is not None:
-        out["c_negpip_mask"] = comfy.conds.CONDRegular(negpip_mask)
+        out[COND_NEGPIP_MASK_KEY] = comfy.conds.CONDRegular(negpip_mask)
 
     return out
 
@@ -36,10 +40,10 @@ def anima_extra_conds_negpip(
 def cosmos_diffusion_negpip_wrapper(executor, *args, **kwargs):
     context: torch.Tensor = args[2]
     transformer_options: dict[str, Any] = kwargs.get("transformer_options", {})
-    negpip_mask: torch.Tensor | None = kwargs.get("c_negpip_mask")
+    negpip_mask: torch.Tensor | None = kwargs.get(COND_NEGPIP_MASK_KEY)
 
     if negpip_mask is not None:
-        transformer_options["negpip_mask"] = negpip_mask.to(context)
+        transformer_options[NEGPIP_MASK_KEY] = negpip_mask.to(context)
 
     kwargs["transformer_options"] = transformer_options
 
@@ -53,7 +57,7 @@ def cosmos_attention_forward_negpip(
     rope_emb: torch.Tensor | None = None,
     transformer_options: dict | None = {},
 ) -> torch.Tensor:
-    negpip_mask = transformer_options.get("negpip_mask") if transformer_options else None
+    negpip_mask = transformer_options.get(NEGPIP_MASK_KEY) if transformer_options else None
     q, k, v = cosmos_attention_compute_qkv_negpip(
         self,
         x,
