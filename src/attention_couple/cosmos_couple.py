@@ -12,15 +12,16 @@ from comfy.samplers import CFGGuider, process_conds
 from ..negpip.anima_negpip import COND_NEGPIP_MASK_KEY, NEGPIP_MASK_KEY
 from .common import COND, UNCOND, CondLike, lcm_for_list, reshape_mask
 
-CONDS_COUPLE_KEY = "conds_couple"
-NEGPIP_MASKS_COUPLE_KEY = "negpip_masks_couple"
-NUM_TOKENS_COUPLE_KEY = "num_tokens_couple"
+CONDS_COUPLE_KEY = "ppm_couple_conds"
+COND_UNCOND_COUPLE_KEY = "ppm_couple_cond_or_uncond"
+NEGPIP_MASKS_COUPLE_KEY = "ppm_couple_negpip_masks"
+NUM_TOKENS_COUPLE_KEY = "ppm_couple_num_tokens"
 
 
-def anima_couple_sample_wrapper(cond_inputs: list[CondLike], device: Device):
+def cosmos_couple_sample_wrapper(cond_inputs: list[CondLike], device: Device):
     conds_converted = [convert_cond(cond)[0] for cond in cond_inputs]
 
-    def _anima_couple_sample_wrapper(executor, *args, **kwargs):
+    def _cosmos_couple_sample_wrapper(executor, *args, **kwargs):
         if len(conds_converted) > 0:
             guider: CFGGuider = args[0]
             extra_options: dict[str, Any] = args[2]
@@ -49,63 +50,62 @@ def anima_couple_sample_wrapper(cond_inputs: list[CondLike], device: Device):
             ]
 
             model_options: dict[str, Any] = extra_options["model_options"]
-            transformer_options: dict[str, Any] = model_options.get("transformer_options", {})
+            transformer_options: dict[str, Any] = model_options.get("transformer_options", {}).copy()
             transformer_options[CONDS_COUPLE_KEY] = conds_couple
             if len(negpip_masks_couple) > 0:
                 transformer_options[NEGPIP_MASKS_COUPLE_KEY] = negpip_masks_couple
             transformer_options[NUM_TOKENS_COUPLE_KEY] = [cond.shape[1] for cond in conds_couple]
-
             model_options["transformer_options"] = transformer_options
-
-            return executor(*args, **kwargs)
 
         return executor(*args, **kwargs)
 
-    return _anima_couple_sample_wrapper
+    return _cosmos_couple_sample_wrapper
 
 
-def anima_forward_wrapper(executor: WrapperExecutor, *args, **kwargs):
-    anima_model: AnimaDIT = executor.class_obj  # type: ignore
+def cosmos_couple_diffusion_wrapper(mask: torch.Tensor, num_conds: int):
+    def _cosmos_couple_diffusion_wrapper(executor: WrapperExecutor, *args, **kwargs):
+        anima_model: AnimaDIT = executor.class_obj  # type: ignore
 
-    x: torch.Tensor = args[0]
-    transformer_options: dict = kwargs.get("transformer_options", {}).copy()
-    patch_spatial = anima_model.patch_spatial
+        x: torch.Tensor = args[0]
+        transformer_options: dict[str, Any] = kwargs.get("transformer_options", {}).copy()
+        patch_spatial = anima_model.patch_spatial
 
-    activations_shape = list(x.shape)
-    activations_shape[-2] = activations_shape[-2] // patch_spatial
-    activations_shape[-1] = activations_shape[-1] // patch_spatial
+        activations_shape = list(x.shape)
+        activations_shape[-2] = activations_shape[-2] // patch_spatial
+        activations_shape[-1] = activations_shape[-1] // patch_spatial
 
-    transformer_options["activations_shape"] = activations_shape
-    kwargs["transformer_options"] = transformer_options
+        transformer_options["activations_shape"] = activations_shape
+        transformer_options["ppm_attn_pre_ca"] = _cosmos_ppm_attn_pre_ca_couple
+        transformer_options["ppm_attn_output_ca"] = _cosmos_ppm_attn_output_ca_couple
+        kwargs["transformer_options"] = transformer_options
 
-    return executor(*args, **kwargs)
+        return executor(*args, **kwargs)
 
-
-def cosmos_attention_forward_couple(_forward_prev: Callable, mask: torch.Tensor, num_conds: int):
-
-    def _cosmos_attention_forward_couple(
+    def _cosmos_ppm_attn_pre_ca_couple(
+        transformer_options: dict,
         x: torch.Tensor,
-        context: torch.Tensor | None = None,
-        rope_emb: torch.Tensor | None = None,
-        transformer_options: dict | None = {},
+        context: torch.Tensor,
+        rope_emb: torch.Tensor,
+        _transformer_options,
     ):
         cond_or_uncond_couple = []
+        transformer_options = transformer_options.copy()
 
-        if context is None or transformer_options is None or CONDS_COUPLE_KEY not in transformer_options:
-            return _forward_prev(x, context, rope_emb, transformer_options)
+        if context is None or CONDS_COUPLE_KEY not in transformer_options:
+            transformer_options[COND_UNCOND_COUPLE_KEY] = list(transformer_options["cond_or_uncond"])
+            return x, context, rope_emb, transformer_options
 
-        _transformer_options = transformer_options.copy()
         c: torch.Tensor = context
 
-        conds: list[torch.Tensor] = _transformer_options[CONDS_COUPLE_KEY]
-        num_tokens_c: list[int] = _transformer_options[NUM_TOKENS_COUPLE_KEY]
-        cond_or_uncond = _transformer_options["cond_or_uncond"]
+        conds: list[torch.Tensor] = transformer_options[CONDS_COUPLE_KEY]
+        num_tokens_c: list[int] = transformer_options[NUM_TOKENS_COUPLE_KEY]
+        cond_or_uncond = transformer_options["cond_or_uncond"]
 
         num_chunks = len(cond_or_uncond)
         bs = x.shape[0] // num_chunks
 
-        n: torch.Tensor = _transformer_options.get(NEGPIP_MASK_KEY, None)  # type: ignore
-        negpip_masks: list[torch.Tensor] = _transformer_options.get(NEGPIP_MASKS_COUPLE_KEY, None)  # type: ignore
+        n: torch.Tensor = transformer_options.get(NEGPIP_MASK_KEY, None)  # type: ignore
+        negpip_masks: list[torch.Tensor] = transformer_options.get(NEGPIP_MASKS_COUPLE_KEY, None)  # type: ignore
         has_negpip = n is not None and negpip_masks is not None
 
         x_chunks = x.chunk(num_chunks, dim=0)
@@ -150,11 +150,16 @@ def cosmos_attention_forward_couple(_forward_prev: Callable, mask: torch.Tensor,
 
         if has_negpip:
             ns = torch.cat(ns, dim=0)
-            _transformer_options[NEGPIP_MASK_KEY] = ns
+            transformer_options[NEGPIP_MASK_KEY] = ns
 
-        out = _forward_prev(xs, cs, rope_emb, _transformer_options)
+        transformer_options[COND_UNCOND_COUPLE_KEY] = cond_or_uncond_couple
 
-        size = tuple(_transformer_options["activations_shape"][-2:])
+        return xs, cs, rope_emb, transformer_options
+
+    def _cosmos_ppm_attn_output_ca_couple(transformer_options: dict, out: torch.Tensor):
+        cond_or_uncond = transformer_options[COND_UNCOND_COUPLE_KEY]
+        size = tuple(transformer_options["activations_shape"][-2:])
+        bs = out.shape[0] // len(cond_or_uncond)
         num_tokens = out.shape[1]
         mask_downsample = reshape_mask(mask, size, bs, num_tokens)
 
@@ -162,7 +167,7 @@ def cosmos_attention_forward_couple(_forward_prev: Callable, mask: torch.Tensor,
         cond_outputs = []
         i_cond = 0
 
-        for i, cond_type in enumerate(cond_or_uncond_couple):
+        for i, cond_type in enumerate(cond_or_uncond):
             pos, next_pos = i * bs, (i + 1) * bs
 
             if cond_type == UNCOND:
@@ -179,4 +184,4 @@ def cosmos_attention_forward_couple(_forward_prev: Callable, mask: torch.Tensor,
 
         return torch.cat(outputs, dim=0)
 
-    return _cosmos_attention_forward_couple
+    return _cosmos_couple_diffusion_wrapper

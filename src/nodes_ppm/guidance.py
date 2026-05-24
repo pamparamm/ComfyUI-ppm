@@ -128,8 +128,9 @@ class RescaleCFGPost(ComfyNodeABC):
             ):
                 return x_cfg
 
-            ro_pos = torch.std(cond, dim=(1, 2, 3), keepdim=True)
-            ro_cfg = torch.std(x_cfg, dim=(1, 2, 3), keepdim=True)
+            latent_dim = tuple(range(1, len(cond.shape)))
+            ro_pos = torch.std(cond, dim=latent_dim, keepdim=True)
+            ro_cfg = torch.std(x_cfg, dim=latent_dim, keepdim=True)
 
             x_rescaled = x_cfg * (ro_pos / ro_cfg)
             # Alternative version of RescaleCFG by madman404
@@ -309,8 +310,9 @@ class RenormCFGPost(ComfyNodeABC):
             ):
                 return x_cfg
 
-            cond_norm = torch.linalg.vector_norm(cond, dim=(1, 2, 3), keepdim=True) * renorm_cfg
-            cfg_norm = torch.linalg.vector_norm(x_cfg, dim=(1, 2, 3), keepdim=True)
+            latent_dim = tuple(range(1, len(cond.shape)))
+            cond_norm = torch.linalg.vector_norm(cond, dim=latent_dim, keepdim=True) * renorm_cfg
+            cfg_norm = torch.linalg.vector_norm(x_cfg, dim=latent_dim, keepdim=True)
             return x_cfg * (cond_norm / cfg_norm).clamp(max=1.0)
 
         m = model.clone()

@@ -6,7 +6,7 @@ from torch.types import Device
 
 from .common import COND, UNCOND, CondLike, lcm_for_list, reshape_mask
 
-COND_UNCOND_COUPLE_KEY = "cond_or_uncond_couple"
+COND_UNCOND_COUPLE_KEY = "ppm_couple_cond_or_uncond"
 
 
 def _split_kv_cond(cond: torch.Tensor, has_negpip: bool) -> tuple[torch.Tensor, torch.Tensor]:

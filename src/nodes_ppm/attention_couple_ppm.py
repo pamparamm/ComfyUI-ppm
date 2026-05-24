@@ -5,19 +5,17 @@ import torch
 
 import comfy.model_management
 import comfy.patcher_extension
-from comfy.ldm.anima.model import Anima as AnimaDIT
-from comfy.ldm.cosmos.predict2 import Attention as CosmosAttention
-from comfy.model_base import SDXL, Anima, BaseModel, SDXLRefiner
+from comfy.model_base import SDXL, Anima, BaseModel, CosmosPredict2, SDXLRefiner
 from comfy.model_patcher import ModelPatcher
 from comfy_api.latest import io
 
-from ..attention_couple.anima_couple import (
-    anima_couple_sample_wrapper,
-    anima_forward_wrapper,
-    cosmos_attention_forward_couple,
-)
 from ..attention_couple.common import CondLike
+from ..attention_couple.cosmos_couple import (
+    cosmos_couple_diffusion_wrapper,
+    cosmos_couple_sample_wrapper,
+)
 from ..attention_couple.unet_couple import unet_attn2_couple_wrapper, unet_attn2_output_couple_wrapper
+from ..dit_patches.cosmos_attention import patch_cosmos_attention
 from .clip_negpip import has_negpip
 
 COUPLE_WRAPPER_KEY = "ppm_attention_couple"
@@ -67,7 +65,6 @@ class AttentionCouplePPM(io.ComfyNode):
         mask = mask / mask.sum(dim=0, keepdim=True)
 
         model_type = type(m.model)
-        diffusion_model = m.get_model_object("diffusion_model")
 
         # SD1.* and SDXL
         if issubclass(model_type, SDXL) or issubclass(model_type, SDXLRefiner) or model_type == BaseModel:
@@ -83,27 +80,19 @@ class AttentionCouplePPM(io.ComfyNode):
             )
             m.set_model_attn2_output_patch(unet_attn2_output_couple_wrapper(mask))
 
-        if issubclass(model_type, Anima):
-            anima_model: AnimaDIT = diffusion_model  # type: ignore
+        # Anima and Cosmos Predict2
+        if issubclass(model_type, Anima) or issubclass(model_type, CosmosPredict2):
+            patch_cosmos_attention(m)
             m.add_wrapper_with_key(
                 comfy.patcher_extension.WrappersMP.SAMPLER_SAMPLE,
                 COUPLE_WRAPPER_KEY,
-                anima_couple_sample_wrapper(cond_inputs, device),
+                cosmos_couple_sample_wrapper(cond_inputs, device),
             )
             m.add_wrapper_with_key(
                 comfy.patcher_extension.WrappersMP.DIFFUSION_MODEL,
                 COUPLE_WRAPPER_KEY,
-                anima_forward_wrapper,
+                cosmos_couple_diffusion_wrapper(mask, num_conds),
             )
-
-            for block_name, block in (
-                (n, b) for n, b in anima_model.named_modules() if "cross_attn" in n and isinstance(b, CosmosAttention)
-            ):
-                attn_forward_prev = m.get_model_object(f"diffusion_model.{block_name}.forward")
-                m.add_object_patch(
-                    f"diffusion_model.{block_name}.forward",
-                    cosmos_attention_forward_couple(attn_forward_prev, mask, num_conds),
-                )
 
         return io.NodeOutput(m)
 

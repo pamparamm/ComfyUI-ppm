@@ -26,8 +26,9 @@ class LatentOperationTonemapLuminance(ComfyNodeABC):
             lum_m = (torch.linalg.vector_norm(lum, dim=(1)) + 1e-10)[:, None]
             lum_norm = lum / lum_m
 
-            mean = torch.mean(lum_m, dim=(1, 2, 3), keepdim=True)
-            std = torch.std(lum_m, dim=(1, 2, 3), keepdim=True)
+            latent_dim = tuple(range(1, len(latent.shape)))
+            mean = torch.mean(lum_m, dim=latent_dim, keepdim=True)
+            std = torch.std(lum_m, dim=latent_dim, keepdim=True)
             top = (std * 5 + mean) * multiplier
 
             lum_m_t = lum_m / top

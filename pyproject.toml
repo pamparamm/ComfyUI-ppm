@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-ppm"
 description = "Attention Couple for SDXL and Anima; NegPiP (negative weights in prompts) for SDXL and Anima; etc."
-version = "1.1.5"
+version = "1.1.6"
 license = { text = "GNU Affero General Public License v3" }
 
 [project.urls]

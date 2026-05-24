@@ -74,8 +74,9 @@ class LatentToWidthHeight(ComfyNodeABC):
     def convert(self, latent):
         samples: torch.Tensor = latent["samples"]
 
-        height = samples.shape[2] * 8
-        width = samples.shape[3] * 8
+        height = samples.shape[-2] * 8
+        width = samples.shape[-1] * 8
+
         if height > MAX_RESOLUTION or width > MAX_RESOLUTION:
             raise ValueError(f"{height} and/or {width} are greater than {MAX_RESOLUTION}")
 
