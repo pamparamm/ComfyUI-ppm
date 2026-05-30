@@ -5,8 +5,36 @@ import einops
 import torch
 
 from comfy.ldm.cosmos.predict2 import Attention as CosmosAttention
-from comfy.ldm.cosmos.predict2 import MiniTrainDIT, apply_rotary_pos_emb
+from comfy.ldm.cosmos.predict2 import MiniTrainDIT
 from comfy.model_patcher import ModelPatcher
+
+apply_rope_split_half: Callable[[torch.Tensor, torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]
+try:
+    import comfy.quant_ops
+
+    apply_rope_split_half = comfy.quant_ops.ck.apply_rope_split_half
+except ImportError, AttributeError:
+
+    def _apply_rope_split_half(
+        q: torch.Tensor,
+        k: torch.Tensor,
+        rope_emb: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        q = _apply_rotary_pos_emb(q, rope_emb)
+        k = _apply_rotary_pos_emb(k, rope_emb)
+        return q, k
+
+    # Copied from comfy.ldm.cosmos.predict2 for backward compatibility
+    def _apply_rotary_pos_emb(
+        t: torch.Tensor,
+        freqs: torch.Tensor,
+    ) -> torch.Tensor:
+        t_ = t.reshape(*t.shape[:-1], 2, -1).movedim(-2, -1).unsqueeze(-2).float()
+        t_out = freqs[..., 0] * t_[..., 0] + freqs[..., 1] * t_[..., 1]
+        t_out = t_out.movedim(-1, -2).reshape(*t.shape).type_as(t)
+        return t_out
+
+    apply_rope_split_half = _apply_rope_split_half
 
 
 def patch_cosmos_attention(model_patcher: ModelPatcher):
@@ -87,8 +115,7 @@ def _compute_qkv_patched(
         k = _calc_patched("ppm_attn_k_norm", transformer_options, self.k_norm, k)
         v = _calc_patched("ppm_attn_v_norm", transformer_options, self.v_norm, v)
         if self.is_selfattn and rope_emb is not None:  # only apply to self-attention!
-            q = _calc_patched("ppm_attn_q_rope", transformer_options, apply_rotary_pos_emb, q, rope_emb)
-            k = _calc_patched("ppm_attn_k_rope", transformer_options, apply_rotary_pos_emb, k, rope_emb)
+            q, k = _calc_patched("ppm_attn_rope", transformer_options, apply_rope_split_half, q, k, rope_emb)
         return q, k, v
 
     q, k, v = apply_norm_and_rotary_pos_emb_patched(q, k, v, rope_emb)
