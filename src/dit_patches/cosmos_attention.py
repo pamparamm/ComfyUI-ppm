@@ -13,7 +13,7 @@ try:
     import comfy.quant_ops
 
     apply_rope_split_half = comfy.quant_ops.ck.apply_rope_split_half
-except ImportError, AttributeError:
+except (ImportError, AttributeError):  # fmt: skip
 
     def _apply_rope_split_half(
         q: torch.Tensor,
