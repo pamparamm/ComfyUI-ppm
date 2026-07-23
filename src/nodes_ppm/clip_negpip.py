@@ -4,7 +4,6 @@
 from functools import partial
 from typing import Any
 
-import comfy.patcher_extension
 from comfy.ldm.flux.model import Flux as FluxDIT
 from comfy.model_base import SDXL, Anima, BaseModel, Flux, SDXLRefiner
 from comfy.model_patcher import ModelPatcher
@@ -12,12 +11,11 @@ from comfy.sd import CLIP
 from comfy_api.latest import io
 
 from ..compat.advanced_encode import patch_adv_encode
-from ..dit_patches.cosmos_attention import patch_cosmos_attention
-from ..negpip.anima_negpip import anima_extra_conds_negpip, cosmos_diffusion_negpip_wrapper
+from ..negpip.anima_negpip import patch_anima_negpip
 from ..negpip.flux_negpip import flux_forward_orig_negpip
 from ..negpip.unet_negpip import encode_token_weights_negpip, sdxl_attn2_negpip
 
-NEGPIP_WRAPPER_KEY = "ppm_negpip"
+NEGPIP_KEY = "ppm_negpip"
 SUPPORTED_ENCODERS = [
     "clip_g",
     "clip_l",
@@ -28,7 +26,7 @@ SUPPORTED_ENCODERS = [
 
 
 def has_negpip(model_options: dict) -> bool:
-    return model_options.get(NEGPIP_WRAPPER_KEY, False)
+    return model_options.get(NEGPIP_KEY, False)
 
 
 class CLIPNegPip(io.ComfyNode):
@@ -66,8 +64,8 @@ class CLIPNegPip(io.ComfyNode):
             is_patched = cls.patch_negpip(m, c, encoders)
 
             if is_patched:
-                model_options[NEGPIP_WRAPPER_KEY] = True
-                clip_options[NEGPIP_WRAPPER_KEY] = True
+                model_options[NEGPIP_KEY] = True
+                clip_options[NEGPIP_KEY] = True
 
         return io.NodeOutput(m, c)
 
@@ -99,17 +97,7 @@ class CLIPNegPip(io.ComfyNode):
 
         # Anima
         if issubclass(model_type, Anima):
-            patch_cosmos_attention(m)
-            m.add_object_patch(
-                "extra_conds",
-                partial(anima_extra_conds_negpip, m.model.extra_conds),
-            )
-            m.add_wrapper_with_key(
-                comfy.patcher_extension.WrappersMP.DIFFUSION_MODEL,
-                NEGPIP_WRAPPER_KEY,
-                cosmos_diffusion_negpip_wrapper,
-            )
-
+            patch_anima_negpip(m)
             return True
 
         return False

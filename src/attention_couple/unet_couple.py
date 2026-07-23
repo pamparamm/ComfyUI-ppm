@@ -21,11 +21,11 @@ def _split_kv_cond(cond: torch.Tensor, has_negpip: bool) -> tuple[torch.Tensor, 
 def unet_attn2_couple_wrapper(
     base_cond: CondLike,
     cond_inputs: list[CondLike],
-    num_conds: int,
     has_negpip: bool,
     device: Device,
     dtype: torch.dtype,
 ):
+    num_conds = len(cond_inputs) + 1
     conds: list[torch.Tensor] = [cond[0][0].to(device, dtype=dtype) for cond in cond_inputs]
 
     base_strength: float = base_cond[0][1].get("strength", 1.0)

@@ -4,7 +4,10 @@ from typing import Any, Callable
 import torch
 from torch.types import Device
 
-from comfy.ldm.anima.model import Anima as AnimaDIT
+import comfy.patcher_extension
+from comfy.ldm.cosmos.predict2 import Attention as CosmosAttention
+from comfy.ldm.cosmos.predict2 import MiniTrainDIT
+from comfy.model_patcher import ModelPatcher
 from comfy.patcher_extension import WrapperExecutor
 from comfy.sampler_helpers import convert_cond
 from comfy.samplers import CFGGuider, process_conds
@@ -12,10 +15,34 @@ from comfy.samplers import CFGGuider, process_conds
 from ..negpip.anima_negpip import COND_NEGPIP_MASK_KEY, NEGPIP_MASK_KEY
 from .common import COND, UNCOND, CondLike, lcm_for_list, reshape_mask
 
+WRAPPER_KEY = "ppm_attention_couple_cosmos"
 CONDS_COUPLE_KEY = "ppm_couple_conds"
 COND_UNCOND_COUPLE_KEY = "ppm_couple_cond_or_uncond"
 NEGPIP_MASKS_COUPLE_KEY = "ppm_couple_negpip_masks"
 NUM_TOKENS_COUPLE_KEY = "ppm_couple_num_tokens"
+NUM_CONDS_COUPLE_KEY = "ppm_couple_num_conds"
+MASK_COUPLE_KEY = "ppm_couple_mask"
+
+
+def patch_cosmos_couple(patcher: ModelPatcher, cond_inputs: list[CondLike], mask: torch.Tensor):
+    cosmos_model: MiniTrainDIT = patcher.get_model_object("diffusion_model")  # type: ignore
+    num_conds = len(cond_inputs) + 1
+    patcher.add_wrapper_with_key(
+        comfy.patcher_extension.WrappersMP.SAMPLER_SAMPLE,
+        WRAPPER_KEY,
+        cosmos_couple_sample_wrapper(cond_inputs, mask.device),
+    )
+    patcher.add_wrapper_with_key(
+        comfy.patcher_extension.WrappersMP.DIFFUSION_MODEL,
+        WRAPPER_KEY,
+        cosmos_couple_diffusion_wrapper(mask, num_conds),
+    )
+    for block_name, block in cosmos_model.named_modules():
+        if isinstance(block, CosmosAttention) and "cross_attn" in block_name:
+            forward_name = f"diffusion_model.{block_name}.forward"
+            previous_forward = patcher.get_model_object(forward_name)
+            forward_wrapper = cosmos_couple_forward_wrapper(previous_forward)
+            patcher.add_object_patch(forward_name, forward_wrapper)
 
 
 def cosmos_couple_sample_wrapper(cond_inputs: list[CondLike], device: Device):
@@ -64,32 +91,43 @@ def cosmos_couple_sample_wrapper(cond_inputs: list[CondLike], device: Device):
 
 def cosmos_couple_diffusion_wrapper(mask: torch.Tensor, num_conds: int):
     def _cosmos_couple_diffusion_wrapper(executor: WrapperExecutor, *args, **kwargs):
-        anima_model: AnimaDIT = executor.class_obj  # type: ignore
+        cosmos_model: MiniTrainDIT = executor.class_obj  # type: ignore
 
         x: torch.Tensor = args[0]
         transformer_options: dict[str, Any] = kwargs.get("transformer_options", {}).copy()
-        patch_spatial = anima_model.patch_spatial
+        patch_spatial = cosmos_model.patch_spatial
 
         activations_shape = list(x.shape)
         activations_shape[-2] = activations_shape[-2] // patch_spatial
         activations_shape[-1] = activations_shape[-1] // patch_spatial
 
-        transformer_options["activations_shape"] = activations_shape
-        transformer_options["ppm_attn_pre_ca"] = _cosmos_ppm_attn_pre_ca_couple
-        transformer_options["ppm_attn_output_ca"] = _cosmos_ppm_attn_output_ca_couple
+        transformer_options["activations_shape"] = tuple(activations_shape)
+        transformer_options[NUM_CONDS_COUPLE_KEY] = num_conds
+        transformer_options[MASK_COUPLE_KEY] = mask
         kwargs["transformer_options"] = transformer_options
 
         return executor(*args, **kwargs)
 
-    def _cosmos_ppm_attn_pre_ca_couple(
-        transformer_options: dict,
+    return _cosmos_couple_diffusion_wrapper
+
+
+def cosmos_couple_forward_wrapper(previous_forward: Callable[..., torch.Tensor]):
+    def _cosmos_couple_forward_wrapper(
         x: torch.Tensor,
-        context: torch.Tensor,
-        rope_emb: torch.Tensor,
-        _transformer_options,
+        context: torch.Tensor | None = None,
+        rope_emb: torch.Tensor | None = None,
+        transformer_options: dict | None = {},
+    ):
+        x, context, rope_emb, transformer_options = _couple_split_input(x, context, rope_emb, transformer_options)
+        out = previous_forward(x, context, rope_emb, transformer_options)
+        out = _couple_merge_output(out, transformer_options)
+        return out
+
+    def _couple_split_input(
+        x: torch.Tensor, context: torch.Tensor | None, rope_emb: torch.Tensor | None, transformer_options: dict | None
     ):
         cond_or_uncond_couple = []
-        transformer_options = transformer_options.copy()
+        transformer_options = transformer_options.copy() if transformer_options else {}
 
         if context is None or CONDS_COUPLE_KEY not in transformer_options:
             transformer_options[COND_UNCOND_COUPLE_KEY] = list(transformer_options["cond_or_uncond"])
@@ -99,6 +137,7 @@ def cosmos_couple_diffusion_wrapper(mask: torch.Tensor, num_conds: int):
 
         conds: list[torch.Tensor] = transformer_options[CONDS_COUPLE_KEY]
         num_tokens_c: list[int] = transformer_options[NUM_TOKENS_COUPLE_KEY]
+        num_conds: int = transformer_options[NUM_CONDS_COUPLE_KEY]
         cond_or_uncond = transformer_options["cond_or_uncond"]
 
         num_chunks = len(cond_or_uncond)
@@ -156,9 +195,10 @@ def cosmos_couple_diffusion_wrapper(mask: torch.Tensor, num_conds: int):
 
         return xs, cs, rope_emb, transformer_options
 
-    def _cosmos_ppm_attn_output_ca_couple(transformer_options: dict, out: torch.Tensor):
+    def _couple_merge_output(out: torch.Tensor, transformer_options: dict):
         cond_or_uncond = transformer_options[COND_UNCOND_COUPLE_KEY]
-        size = tuple(transformer_options["activations_shape"][-2:])
+        mask: torch.Tensor = transformer_options[MASK_COUPLE_KEY]
+        size: tuple[int, int] = transformer_options["activations_shape"][-2:]
         bs = out.shape[0] // len(cond_or_uncond)
         num_tokens = out.shape[1]
         mask_downsample = reshape_mask(mask, size, bs, num_tokens)
@@ -184,4 +224,4 @@ def cosmos_couple_diffusion_wrapper(mask: torch.Tensor, num_conds: int):
 
         return torch.cat(outputs, dim=0)
 
-    return _cosmos_couple_diffusion_wrapper
+    return _cosmos_couple_forward_wrapper
