@@ -1,29 +1,29 @@
 [project]
 name = "comfyui-ppm"
-description = "Attention Couple for SDXL and Anima; NegPiP (negative weights in prompts) for SDXL and Anima; etc."
 version = "1.1.10"
-license = { text = "GNU Affero General Public License v3" }
+description = "Attention Couple for SDXL and Anima; NegPiP (negative weights in prompts) for SDXL and Anima; etc."
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
 
 [project.urls]
 Repository = "https://github.com/pamparamm/ComfyUI-ppm"
-#  Used by Comfy Registry https://comfyregistry.org
+
+[dependency-groups]
+dev = ["pyrefly", "ruff"]
 
 [tool.comfy]
 PublisherId = "pamparamm"
 DisplayName = "ComfyUI-ppm"
 Icon = ""
 
+[tool.pyrefly]
+search-path = ["./", "../../"]
+
 [tool.ruff]
+line-length = 120
+indent-width = 4
 lint.select = ["S307", "S102", "T", "W", "F", "I"]
+src = ["./", "../../"]
 
-[tool.ruff.lint.isort]
-known-first-party = [
-    "comfy",
-    "comfy_api",
-    "comfy_extras",
-    "nodes",
-    "node_helpers",
-]
-
-[tool.pyright]
-extraPaths = ["../../"]
+[tool.uv]
+package = false

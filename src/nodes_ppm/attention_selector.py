@@ -30,7 +30,7 @@ class ModelAttentionSelector(io.ComfyNode):
         model: ModelPatcher = kwargs["model"]
         attention: str = kwargs["attention"]
 
-        m = model.clone()
+        m: ModelPatcher = model.clone()
 
         attention_function: Callable = attn.get_attention_function(attention)  # type: ignore
 
@@ -66,7 +66,7 @@ class CLIPAttentionSelector(io.ComfyNode):
         clip: CLIP = kwargs["clip"]
         attention: str = kwargs["attention"]
 
-        c = clip.clone()
+        c: CLIP = clip.clone()
         patcher = c.patcher
 
         attention_function: Callable = attn.get_attention_function(attention)  # type: ignore

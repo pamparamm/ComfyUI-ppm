@@ -1,0 +1,7 @@
+{
+    "recommendations": [
+        "meta.pyrefly",
+        "charliermarsh.ruff",
+        "tombi-toml.tombi"
+    ]
+}

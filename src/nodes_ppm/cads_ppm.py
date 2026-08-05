@@ -1,14 +1,13 @@
+import copy
 from typing import Any, Callable
 
 import torch
-import copy
 
-from comfy.conds import CONDRegular
 import comfy.samplers
+from comfy.conds import CONDRegular
 from comfy.model_patcher import ModelPatcher
 from comfy.model_sampling import ModelSamplingDiscrete
 from comfy_api.latest import io
-
 
 COND_KEYS = ["c_concat", "c_crossattn"]
 
@@ -39,7 +38,7 @@ class CADSPPM(io.ComfyNode):
         start_percent: float = kwargs["start_percent"]
         end_percent: float = kwargs["end_percent"]
 
-        m = model.clone()
+        m: ModelPatcher = model.clone()
 
         model_sampling: ModelSamplingDiscrete = m.get_model_object("model_sampling")  # type: ignore
         sigma_start = model_sampling.percent_to_sigma(start_percent)

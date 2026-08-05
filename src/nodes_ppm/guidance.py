@@ -37,7 +37,7 @@ class GuidanceLimiter(ComfyNodeABC):
 
             return x_cfg
 
-        m = model.clone()
+        m: ModelPatcher = model.clone()
         m.set_model_sampler_post_cfg_function(limited_cfg)
         return (m,)
 
@@ -139,7 +139,7 @@ class RescaleCFGPost(ComfyNodeABC):
             x_final = cfg_rescale * x_rescaled + (1.0 - cfg_rescale) * x_cfg
             return x_final
 
-        m = model.clone()
+        m: ModelPatcher = model.clone()
         m.set_model_sampler_post_cfg_function(rescale_cfg)
         return (m,)
 
@@ -275,7 +275,7 @@ class DynamicThresholdingPost(ComfyNodeABC):
                 interpolate_phi,
             )
 
-        m = model.clone()
+        m: ModelPatcher = model.clone()
         m.set_model_sampler_post_cfg_function(dynthresh_cfg)
         return (m,)
 
@@ -315,7 +315,7 @@ class RenormCFGPost(ComfyNodeABC):
             cfg_norm = torch.linalg.vector_norm(x_cfg, dim=latent_dim, keepdim=True)
             return x_cfg * (cond_norm / cfg_norm).clamp(max=1.0)
 
-        m = model.clone()
+        m: ModelPatcher = model.clone()
         m.set_model_sampler_post_cfg_function(renorm_cfg_func)
         return (m,)
 
@@ -341,7 +341,7 @@ class TCFGAdvanced(ComfyNodeABC):
     DESCRIPTION = "TCFG – Tangential Damping CFG (2503.18137)\n\nRefine the uncond (negative) to align with the cond (positive) for improving quality."
 
     def patch(self, model: ModelPatcher, multiplier: float, sigma_start: float, sigma_end: float):
-        m = model.clone()
+        m: ModelPatcher = model.clone()
 
         def tangential_damping_cfg(args):
             #  Assume [cond, uncond, ...]
@@ -386,7 +386,7 @@ class SkipFirstStepCFG(ComfyNodeABC):
     CATEGORY = "model_patches/unet"
 
     def patch(self, model: ModelPatcher, skip_percent: float):
-        m = model.clone()
+        m: ModelPatcher = model.clone()
         prev_calc_cond_batch: Callable | None = m.model_options.get("sampler_calc_cond_batch_function")  # type: ignore
 
         def skip_first_step_cfg(args):

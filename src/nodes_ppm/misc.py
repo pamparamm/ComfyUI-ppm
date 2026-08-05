@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import TypedDict
+
 import torch
 
 from comfy.model_base import BaseModel
@@ -127,7 +127,7 @@ class EpsilonScalingPPM(io.ComfyNode):
 
             return new_denoised
 
-        m = model.clone()
+        m: ModelPatcher = model.clone()
         m.set_model_sampler_post_cfg_function(epsilon_scaling_function)
         return io.NodeOutput(m)
 

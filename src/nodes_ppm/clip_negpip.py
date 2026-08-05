@@ -50,8 +50,8 @@ class CLIPNegPip(io.ComfyNode):
     def execute(cls, **kwargs) -> io.NodeOutput:
         model: ModelPatcher = kwargs["model"]
         clip: CLIP = kwargs["clip"]
-        m = model.clone()
-        c = clip.clone()
+        m: ModelPatcher = model.clone()
+        c: CLIP = clip.clone()
         model_options: dict[str, Any] = m.model_options
         clip_options: dict[str, Any] = c.patcher.model_options
 

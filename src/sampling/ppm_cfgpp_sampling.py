@@ -1,7 +1,8 @@
-import comfy.model_patcher
 import torch
-from comfy.k_diffusion.sampling import BrownianTreeNoiseSampler, default_noise_sampler, get_ancestral_step, to_d
 from tqdm import trange
+
+import comfy.model_patcher
+from comfy.k_diffusion.sampling import BrownianTreeNoiseSampler, default_noise_sampler, get_ancestral_step, to_d
 
 CFGPP_SAMPLER_NAMES_KD_ETA: list = [
     "dpmpp_2m_sde_cfg_pp",
@@ -181,7 +182,6 @@ def sample_dpmpp_2s_ancestral_cfg_pp(model, x, sigmas, extra_args=None, callback
         if sigma_down == 0:
             # Euler method
             d = to_d(x, sigmas[i], uncond_denoised)
-            dt = sigma_down - sigmas[i]
             x = denoised + d * sigma_down
         else:
             # DPM-Solver++(2S)

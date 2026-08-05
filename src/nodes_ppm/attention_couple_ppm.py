@@ -42,7 +42,7 @@ class AttentionCouplePPM(io.ComfyNode):
         base_cond: CondLike = kwargs["base_cond"]
         base_mask = kwargs["base_mask"]
 
-        m = model.clone()
+        m: ModelPatcher = model.clone()
         dtype = m.model.diffusion_model.dtype
         device = comfy.model_management.get_torch_device()
         _has_negpip = has_negpip(m.model_options)

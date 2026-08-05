@@ -131,7 +131,7 @@ class FreeU2PPM(ComfyNodeABC):
                 hsp = Fourier_filter(hsp, threshold=threshold, scale=s2)
             return h, hsp
 
-        m = model.clone()
+        m: ModelPatcher = model.clone()
         if output_block:
             logging.debug("Patching output block")
             m.set_model_output_block_patch(block_patch_hsp)
