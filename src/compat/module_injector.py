@@ -5,7 +5,6 @@ from types import ModuleType
 from typing import Callable
 
 import folder_paths
-
 from nodes import get_module_name
 
 
