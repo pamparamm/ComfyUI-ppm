@@ -1,3 +1,5 @@
+import torch
+
 from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
 from comfy.k_diffusion import sampling as k_diffusion_sampling
 from comfy.k_diffusion.sa_solver import get_tau_interval_func
@@ -5,7 +7,12 @@ from comfy.model_patcher import ModelPatcher
 from comfy.samplers import KSAMPLER
 from comfy_api.latest import io
 
-from ..sampling import ppm_cfgpp_dyn_sampling, ppm_cfgpp_sampling, ppm_dyn_sampling, ppm_sampling
+from ..sampling import (
+    ppm_cfgpp_dyn_sampling,
+    ppm_cfgpp_sampling,
+    ppm_dyn_sampling,
+    ppm_sampling,
+)
 
 CFGPP_SAMPLER_NAMES_COMFY_ETA: list = [
     "euler_ancestral_cfg_pp",
@@ -250,10 +257,10 @@ class SamplerER_SDEScheduled(io.ComfyNode):
                     "eta",
                     default=1.0,
                     min=0.0,
-                    max=100.0,
+                    max=10.0,
                     step=0.01,
                     round=False,
-                    tooltip="Stochastic strength of reverse-time SDE.\nWhen eta=0, it reduces to deterministic ODE. This setting doesn't apply to ER-SDE solver type.",
+                    tooltip="Stochastic strength of SDEs.\nWhen eta=0, they reduce to deterministic ODE.\nLarge eta may cause invalid outputs. If this occurs, try decreasing this value.",
                     advanced=True,
                 ),
                 io.Float.Input("sde_start_percent", default=0.2, min=0.0, max=1.0, step=0.001, advanced=True),
@@ -266,9 +273,9 @@ class SamplerER_SDEScheduled(io.ComfyNode):
     @classmethod
     def execute(cls, **kwargs) -> io.NodeOutput:
         model = kwargs["model"]
-        solver_type = kwargs["solver_type"]
-        max_stage = kwargs["max_stage"]
-        eta = kwargs["eta"]
+        solver_type: str = kwargs["solver_type"]
+        max_stage: int = kwargs["max_stage"]
+        eta: float = kwargs["eta"]
         sde_start_percent = kwargs["sde_start_percent"]
         sde_end_percent = kwargs["sde_end_percent"]
         s_noise = kwargs["s_noise"]
@@ -278,18 +285,25 @@ class SamplerER_SDEScheduled(io.ComfyNode):
         end_sigma = model_sampling.percent_to_sigma(sde_end_percent)
         tau_func = get_tau_interval_func(start_sigma, end_sigma, eta=eta)
 
-        if solver_type == "ODE" or (solver_type == "Reverse-time SDE" and eta == 0):
-            eta = 0
-            s_noise = 0
+        def er_sde_noise_scaler(x: torch.Tensor) -> torch.Tensor:
+            return x * ((x**0.3).exp() + 10.0) ** eta
 
-        def reverse_time_sde_noise_scaler(x):
+        def reverse_time_sde_noise_scaler(x: torch.Tensor) -> torch.Tensor:
             return x ** (eta + 1)
 
-        if solver_type == "ER-SDE":
-            # Use the default one in sample_er_sde()
-            noise_scaler = None
-        else:
-            noise_scaler = reverse_time_sde_noise_scaler
+        def ode_noise_scaler(x: torch.Tensor) -> torch.Tensor:
+            return x
+
+        solver_scalers = {
+            "ER-SDE": er_sde_noise_scaler,
+            "Reverse-time SDE": reverse_time_sde_noise_scaler,
+            "ODE": ode_noise_scaler,
+        }
+
+        if solver_type == "ODE" or eta == 0:
+            s_noise = 0.0
+            solver_type = "ODE"
+        noise_scaler = solver_scalers[solver_type]
 
         extra_options = {}
         extra_options["s_noise"] = s_noise

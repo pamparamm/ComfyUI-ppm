@@ -260,10 +260,10 @@ def sample_er_sde_scheduled(
         end_sigma = model_sampling.percent_to_sigma(0.8)
         tau_func = get_tau_interval_func(start_sigma, end_sigma)
 
-    def default_er_sde_noise_scaler(x):
-        return x * ((x**0.3).exp() + 10.0)
+    def default_er_sde_noise_scaler(x: torch.Tensor):
+        return x * ((x**0.3).exp() + 10.0) ** tau_func(sigmas[i + 1])
 
-    def ode_noise_scaler(x):
+    def ode_noise_scaler(x: torch.Tensor):
         return x
 
     noise_scaler = default_er_sde_noise_scaler if noise_scaler is None else noise_scaler

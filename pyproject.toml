@@ -1,6 +1,6 @@
 [project]
 name = "comfyui-ppm"
-version = "1.1.10"
+version = "1.1.11"
 description = "Attention Couple for SDXL and Anima; NegPiP (negative weights in prompts) for SDXL and Anima; etc."
 license = "AGPL-3.0-or-later"
 license-files = ["LICENSE"]
@@ -17,6 +17,7 @@ DisplayName = "ComfyUI-ppm"
 Icon = ""
 
 [tool.pyrefly]
+preset = "default"
 search-path = ["./", "../../"]
 
 [tool.ruff]
