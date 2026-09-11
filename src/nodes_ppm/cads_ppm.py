@@ -6,7 +6,7 @@ import torch
 import comfy.samplers
 from comfy.conds import CONDRegular
 from comfy.model_patcher import ModelPatcher
-from comfy.model_sampling import ModelSamplingDiscrete
+from comfy.model_sampling import ModelSamplingContinuousEDM
 from comfy_api.latest import io
 
 COND_KEYS = ["c_concat", "c_crossattn"]
@@ -40,8 +40,11 @@ class CADSPPM(io.ComfyNode):
 
         m: ModelPatcher = model.clone()
 
-        model_sampling: ModelSamplingDiscrete = m.get_model_object("model_sampling")  # type: ignore
+        # ModelSamplingContinuousEDM is used only for type-checking purposes
+        model_sampling: ModelSamplingContinuousEDM = m.get_model_object("model_sampling")  # type: ignore
         sigma_start = model_sampling.percent_to_sigma(start_percent)
+        if start_percent == 0.0:
+            sigma_start = model_sampling.sigma_max.item()
         sigma_end = model_sampling.percent_to_sigma(end_percent)
 
         prev_calc_cond_batch: Callable | None = m.model_options.get("sampler_calc_cond_batch_function")  # type: ignore
@@ -54,7 +57,9 @@ class CADSPPM(io.ComfyNode):
             model_options = args["model_options"]
 
             sigma = timestep[0].item()
-            if sigma >= sigma_end and sigma <= sigma_start:
+            if scale > 0.0 and end_percent > start_percent and sigma <= sigma_start:
+                cads_percent = (sigma_start - sigma) / (sigma_start - sigma_end)
+                gamma = min(max(0.0, cads_percent), 1.0)
                 conds = copy.deepcopy(conds)
 
                 for cond in conds:
@@ -65,7 +70,7 @@ class CADSPPM(io.ComfyNode):
                         for model_cond_key, model_cond in model_conds.items():
                             if model_cond_key in COND_KEYS:
                                 inner_cond: torch.Tensor = model_cond.cond
-                                inner_cond_noisy = cls.add_noise(inner_cond, scale)
+                                inner_cond_noisy = cls.add_noise(inner_cond, gamma, scale)
                                 model_conds[model_cond_key] = model_cond._copy_with(inner_cond_noisy)
 
             if prev_calc_cond_batch:
@@ -84,19 +89,12 @@ class CADSPPM(io.ComfyNode):
         return io.NodeOutput(m)
 
     @classmethod
-    def sigma_to_percent(cls, model_sampling: ModelSamplingDiscrete, sigma: torch.Tensor):
-        timestep = model_sampling.timestep(sigma)[0].item()
-        percent = timestep / (model_sampling.num_timesteps - 1)
-        return percent
-
-    @classmethod
-    def add_noise(cls, y: torch.Tensor, noise_scale: float = 0.25, psi: float = 1.0):
-        y_mean, y_std = y.mean(), y.std()
-        y = (1.0 - noise_scale) * y + noise_scale * torch.randn_like(y)
-        if psi != 0.0:
-            y_scaled = (y - y.mean()) / y.std() * y_std + y_mean
-            y = psi * y_scaled + (1 - psi) * y
-        return y
+    def add_noise(cls, y: torch.Tensor, gamma: float, noise_scale: float):
+        dims = tuple(range(1, len(y.shape)))
+        y_mean, y_std = y.mean(dim=dims), y.std(dim=dims)
+        y_noised: torch.Tensor = gamma**0.5 * y + noise_scale * (1.0 - gamma) ** 0.5 * torch.randn_like(y)
+        y_noised_norm = (y_noised - y_noised.mean(dim=dims)) / y_noised.std(dim=dims)
+        return y_noised_norm * y_std + y_mean
 
 
 NODES = [CADSPPM]

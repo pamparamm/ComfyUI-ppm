@@ -16,6 +16,7 @@ from .nodes_ppm import (
     latent_tonemap,
     misc,
     samplers,
+    temperature_sampling,
 )
 from .schedulers import inject_schedulers
 
@@ -44,6 +45,7 @@ class PPMExtension(ComfyExtension):
             *v3_schema_stub(latent_tonemap),
             *misc.NODES,
             *v3_schema_stub(samplers),
+            *temperature_sampling.NODES,
         ]
 
 

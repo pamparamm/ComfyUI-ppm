@@ -85,6 +85,15 @@ Implementation of [Applying Guidance in a Limited Interval Improves Sample and D
 
 Guidance Limiter is also available as a `CFGLimiterGuider` guider node for `SamplerCustomAdvanced`.
 
+### Temperature Sampling (PPM)
+
+Implementation of [Diversify Diffusion with Temperature Sampling and Variance-Corrective Time Shifting (Li et al., 2026)](https://arxiv.org/abs/2607.10853).
+
+Currently doesn't work well with ancestral/SDE samplers.
+
+- `gamma` < 1.0 increases sampling diversity, 1.0 disables temperature sampling.
+- `start_percent`/`end_percent` sets sampling window.
+
 ### Epsilon Scaling (PPM)
 
 Modified version of ComfyUI's `Epsilon Scaling` node with a hacky (and mathematically incorrect) support for v-pred ZSNR models.
