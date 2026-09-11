@@ -3,30 +3,36 @@ from typing import Callable, Literal
 import torch
 
 import comfy.samplers
-from comfy.comfy_types.node_typing import IO, ComfyNodeABC, InputTypeDict
 from comfy.model_patcher import ModelPatcher
 from comfy.model_sampling import ModelSamplingDiscrete
+from comfy_api.latest import io
 from comfy_extras.nodes_tcfg import score_tangential_damping
 
 
 # Based on Applying Guidance in a Limited Interval Improves Sample and Distribution Quality in Diffusion Models by Kynkäänniemi et al.
-class GuidanceLimiter(ComfyNodeABC):
+class GuidanceLimiter(io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(cls) -> InputTypeDict:
-        return {
-            "required": {
-                "model": (IO.MODEL, {}),
-                "sigma_start": (IO.FLOAT, {"default": 5.42, "min": -1.0, "max": 10000.0, "step": 0.01, "round": False}),
-                "sigma_end": (IO.FLOAT, {"default": 0.28, "min": -1.0, "max": 10000.0, "step": 0.01, "round": False}),
-            }
-        }
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="Guidance Limiter",
+            display_name="Guidance Limiter",
+            category="model_patches/unet",
+            inputs=[
+                io.Model.Input("model"),
+                io.Float.Input("sigma_start", default=5.42, min=-1.0, max=10000.0, step=0.01, round=False),
+                io.Float.Input("sigma_end", default=0.28, min=-1.0, max=10000.0, step=0.01, round=False),
+            ],
+            outputs=[
+                io.Model.Output(),
+            ],
+        )
 
-    RETURN_TYPES = (IO.MODEL,)
-    FUNCTION = "patch"
+    @classmethod
+    def execute(cls, **kwargs) -> io.NodeOutput:
+        model: ModelPatcher = kwargs["model"]
+        sigma_start: float = kwargs["sigma_start"]
+        sigma_end: float = kwargs["sigma_end"]
 
-    CATEGORY = "model_patches/unet"
-
-    def patch(self, model: ModelPatcher, sigma_start: float, sigma_end: float):
         def limited_cfg(args):
             x_cfg = args["denoised"]
             cond = args["cond_denoised"]
@@ -39,7 +45,7 @@ class GuidanceLimiter(ComfyNodeABC):
 
         m: ModelPatcher = model.clone()
         m.set_model_sampler_post_cfg_function(limited_cfg)
-        return (m,)
+        return io.NodeOutput(m)
 
 
 class Guider_CFGLimiter(comfy.samplers.CFGGuider):
@@ -69,52 +75,69 @@ class Guider_CFGLimiter(comfy.samplers.CFGGuider):
         )
 
 
-class CFGLimiterGuider(ComfyNodeABC):
+class CFGLimiterGuider(io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(cls) -> InputTypeDict:
-        return {
-            "required": {
-                "model": (IO.MODEL, {}),
-                "positive": (IO.CONDITIONING, {}),
-                "negative": (IO.CONDITIONING, {}),
-                "cfg": (IO.FLOAT, {"default": 8.0, "min": 0.0, "max": 100.0, "step": 0.1, "round": 0.01}),
-                "sigma_start": (IO.FLOAT, {"default": 5.42, "min": -1.0, "max": 10000.0, "step": 0.01, "round": False}),
-                "sigma_end": (IO.FLOAT, {"default": 0.28, "min": -1.0, "max": 10000.0, "step": 0.01, "round": False}),
-            }
-        }
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="CFGLimiterGuider",
+            display_name="CFGLimiterGuider",
+            category="sampling/custom_sampling/guiders",
+            inputs=[
+                io.Model.Input("model"),
+                io.Conditioning.Input("positive"),
+                io.Conditioning.Input("negative"),
+                io.Float.Input("cfg", default=8.0, min=0.0, max=100.0, step=0.1, round=0.01),
+                io.Float.Input("sigma_start", default=5.42, min=-1.0, max=10000.0, step=0.01, round=False),
+                io.Float.Input("sigma_end", default=0.28, min=-1.0, max=10000.0, step=0.01, round=False),
+            ],
+            outputs=[
+                io.Guider.Output(),
+            ],
+        )
 
-    RETURN_TYPES = (IO.GUIDER,)
+    @classmethod
+    def execute(cls, **kwargs) -> io.NodeOutput:
+        model: ModelPatcher = kwargs["model"]
+        positive = kwargs["positive"]
+        negative = kwargs["negative"]
+        cfg: float = kwargs["cfg"]
+        sigma_start: float = kwargs["sigma_start"]
+        sigma_end: float = kwargs["sigma_end"]
 
-    FUNCTION = "get_guider"
-    CATEGORY = "sampling/custom_sampling/guiders"
-
-    def get_guider(self, model: ModelPatcher, positive, negative, cfg: float, sigma_start: float, sigma_end: float):
         guider = Guider_CFGLimiter(model)
         guider.set_conds(positive, negative)
         guider.set_cfg(cfg)
         guider.set_limits(sigma_start, sigma_end)
-        return (guider,)
+        return io.NodeOutput(guider)
 
 
-class RescaleCFGPost(ComfyNodeABC):
+class RescaleCFGPost(io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(cls) -> InputTypeDict:
-        return {
-            "required": {
-                "model": (IO.MODEL, {}),
-                "multiplier": (IO.FLOAT, {"default": 0.7, "min": 0.0, "max": 1.0, "step": 0.01, "round": 0.01}),
-                "alt_mode": (IO.BOOLEAN, {"default": False}),
-                "sigma_start": (IO.FLOAT, {"default": -1.0, "min": -1.0, "max": 10000.0, "step": 0.01, "round": False}),
-                "sigma_end": (IO.FLOAT, {"default": -1.0, "min": -1.0, "max": 10000.0, "step": 0.01, "round": False}),
-            },
-        }
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="RescaleCFGPost",
+            display_name="RescaleCFGPost",
+            category="model_patches/unet",
+            inputs=[
+                io.Model.Input("model"),
+                io.Float.Input("multiplier", default=0.7, min=0.0, max=1.0, step=0.01, round=0.01),
+                io.Boolean.Input("alt_mode", default=False),
+                io.Float.Input("sigma_start", default=-1.0, min=-1.0, max=10000.0, step=0.01, round=False),
+                io.Float.Input("sigma_end", default=-1.0, min=-1.0, max=10000.0, step=0.01, round=False),
+            ],
+            outputs=[
+                io.Model.Output(),
+            ],
+        )
 
-    RETURN_TYPES = (IO.MODEL,)
-    FUNCTION = "patch"
+    @classmethod
+    def execute(cls, **kwargs) -> io.NodeOutput:
+        model: ModelPatcher = kwargs["model"]
+        multiplier: float = kwargs["multiplier"]
+        alt_mode: bool = kwargs["alt_mode"]
+        sigma_start: float = kwargs["sigma_start"]
+        sigma_end: float = kwargs["sigma_end"]
 
-    CATEGORY = "model_patches/unet"
-
-    def patch(self, model: ModelPatcher, multiplier: float, alt_mode: bool, sigma_start: float, sigma_end: float):
         def rescale_cfg(args):
             x_cfg = args["denoised"]
             cond = args["cond_denoised"]
@@ -141,7 +164,7 @@ class RescaleCFGPost(ComfyNodeABC):
 
         m: ModelPatcher = model.clone()
         m.set_model_sampler_post_cfg_function(rescale_cfg)
-        return (m,)
+        return io.NodeOutput(m)
 
 
 # Shamelessly taken from sd-dynamic-thresholding by Alex "mcmonkey" Goodwin licensed under MIT License
@@ -204,56 +227,70 @@ class DynThresh:
         return result
 
 
-class DynamicThresholdingSimplePost(ComfyNodeABC):
+class DynamicThresholdingSimplePost(io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(cls) -> InputTypeDict:
-        return {
-            "required": {
-                "model": (IO.MODEL, {}),
-                "mimic_scale": (IO.FLOAT, {"default": 8.0, "min": 0.0, "max": 100.0, "step": 0.1, "round": 0.01}),
-                "threshold_percentile": (IO.FLOAT, {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
-            },
-        }
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="DynamicThresholdingSimplePost",
+            display_name="DynamicThresholdingSimplePost",
+            category="model_patches/unet",
+            inputs=[
+                io.Model.Input("model"),
+                io.Float.Input("mimic_scale", default=8.0, min=0.0, max=100.0, step=0.1, round=0.01),
+                io.Float.Input("threshold_percentile", default=1.0, min=0.0, max=1.0, step=0.01),
+            ],
+            outputs=[
+                io.Model.Output(),
+            ],
+        )
 
-    RETURN_TYPES = (IO.MODEL,)
-    FUNCTION = "patch"
-
-    CATEGORY = "model_patches/unet"
-
-    def patch(self, model: ModelPatcher, mimic_scale: float, threshold_percentile: float):
-        return DynamicThresholdingPost().patch(model, mimic_scale, threshold_percentile)
-
-
-class DynamicThresholdingPost(ComfyNodeABC):
     @classmethod
-    def INPUT_TYPES(cls) -> InputTypeDict:
-        return {
-            "required": {
-                "model": (IO.MODEL, {}),
-                "mimic_scale": (IO.FLOAT, {"default": 8.0, "min": 0.0, "max": 100.0, "step": 0.1, "round": 0.01}),
-                "threshold_percentile": (IO.FLOAT, {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "separate_feature_channels": (IO.BOOLEAN, {"default": False}),
-                "scaling_startpoint": (IO.COMBO, {"default": "MEAN", "options": ["MEAN", "ZERO"]}),
-                "variability_measure": (IO.COMBO, {"default": "AD", "options": ["AD", "STD"]}),
-                "interpolate_phi": (IO.FLOAT, {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
-            },
-        }
+    def execute(cls, **kwargs) -> io.NodeOutput:
+        model: ModelPatcher = kwargs["model"]
+        mimic_scale: float = kwargs["mimic_scale"]
+        threshold_percentile: float = kwargs["threshold_percentile"]
+        return DynamicThresholdingPost.execute(
+            model=model,
+            mimic_scale=mimic_scale,
+            threshold_percentile=threshold_percentile,
+            separate_feature_channels=False,
+            scaling_startpoint="MEAN",
+            variability_measure="AD",
+            interpolate_phi=1.0,
+        )
 
-    RETURN_TYPES = (IO.MODEL,)
-    FUNCTION = "patch"
 
-    CATEGORY = "model_patches/unet"
+class DynamicThresholdingPost(io.ComfyNode):
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="DynamicThresholdingPost",
+            display_name="DynamicThresholdingFullPost",
+            category="model_patches/unet",
+            inputs=[
+                io.Model.Input("model"),
+                io.Float.Input("mimic_scale", default=8.0, min=0.0, max=100.0, step=0.1, round=0.01),
+                io.Float.Input("threshold_percentile", default=1.0, min=0.0, max=1.0, step=0.01),
+                io.Boolean.Input("separate_feature_channels", default=False),
+                io.Combo.Input("scaling_startpoint", default="MEAN", options=["MEAN", "ZERO"]),
+                io.Combo.Input("variability_measure", default="AD", options=["AD", "STD"]),
+                io.Float.Input("interpolate_phi", default=1.0, min=0.0, max=1.0, step=0.01),
+            ],
+            outputs=[
+                io.Model.Output(),
+            ],
+        )
 
-    def patch(
-        self,
-        model: ModelPatcher,
-        mimic_scale: float,
-        threshold_percentile: float,
-        separate_feature_channels: bool = False,
-        scaling_startpoint: Literal["MEAN", "ZERO"] = "MEAN",
-        variability_measure: Literal["AD", "STD"] = "AD",
-        interpolate_phi: float = 1.0,
-    ):
+    @classmethod
+    def execute(cls, **kwargs) -> io.NodeOutput:
+        model: ModelPatcher = kwargs["model"]
+        mimic_scale: float = kwargs["mimic_scale"]
+        threshold_percentile: float = kwargs["threshold_percentile"]
+        separate_feature_channels: bool = kwargs["separate_feature_channels"]
+        scaling_startpoint: Literal["MEAN", "ZERO"] = kwargs["scaling_startpoint"]
+        variability_measure: Literal["AD", "STD"] = kwargs["variability_measure"]
+        interpolate_phi: float = kwargs["interpolate_phi"]
+
         def dynthresh_cfg(args):
             x_cfg = args["denoised"]
             cond = args["cond_denoised"]
@@ -277,27 +314,34 @@ class DynamicThresholdingPost(ComfyNodeABC):
 
         m: ModelPatcher = model.clone()
         m.set_model_sampler_post_cfg_function(dynthresh_cfg)
-        return (m,)
+        return io.NodeOutput(m)
 
 
-class RenormCFGPost(ComfyNodeABC):
+class RenormCFGPost(io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(cls) -> InputTypeDict:
-        return {
-            "required": {
-                "model": (IO.MODEL, {}),
-                "renorm_cfg": (IO.FLOAT, {"default": 1.0, "min": 0.0, "max": 100.0, "step": 0.01}),
-                "sigma_start": (IO.FLOAT, {"default": -1.0, "min": -1.0, "max": 10000.0, "step": 0.01, "round": False}),
-                "sigma_end": (IO.FLOAT, {"default": -1.0, "min": -1.0, "max": 10000.0, "step": 0.01, "round": False}),
-            }
-        }
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="RenormCFGPost",
+            display_name="RenormCFGPost",
+            category="model_patches/unet",
+            inputs=[
+                io.Model.Input("model"),
+                io.Float.Input("renorm_cfg", default=1.0, min=0.0, max=100.0, step=0.01),
+                io.Float.Input("sigma_start", default=-1.0, min=-1.0, max=10000.0, step=0.01, round=False),
+                io.Float.Input("sigma_end", default=-1.0, min=-1.0, max=10000.0, step=0.01, round=False),
+            ],
+            outputs=[
+                io.Model.Output(),
+            ],
+        )
 
-    RETURN_TYPES = (IO.MODEL,)
-    FUNCTION = "patch"
+    @classmethod
+    def execute(cls, **kwargs) -> io.NodeOutput:
+        model: ModelPatcher = kwargs["model"]
+        renorm_cfg: float = kwargs["renorm_cfg"]
+        sigma_start: float = kwargs["sigma_start"]
+        sigma_end: float = kwargs["sigma_end"]
 
-    CATEGORY = "model_patches/unet"
-
-    def patch(self, model: ModelPatcher, renorm_cfg: float, sigma_start: float, sigma_end: float):
         def renorm_cfg_func(args):
             x_cfg = args["denoised"]
             cond = args["cond_denoised"]
@@ -317,30 +361,36 @@ class RenormCFGPost(ComfyNodeABC):
 
         m: ModelPatcher = model.clone()
         m.set_model_sampler_post_cfg_function(renorm_cfg_func)
-        return (m,)
+        return io.NodeOutput(m)
 
 
 # Slightly modified version of TCFG from ComfyUI
-class TCFGAdvanced(ComfyNodeABC):
+class TCFGAdvanced(io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(cls) -> InputTypeDict:
-        return {
-            "required": {
-                "model": (IO.MODEL, {}),
-                "multiplier": (IO.FLOAT, {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01, "round": 0.01}),
-                "sigma_start": (IO.FLOAT, {"default": -1.0, "min": -1.0, "max": 10000.0, "step": 0.01, "round": False}),
-                "sigma_end": (IO.FLOAT, {"default": -1.0, "min": -1.0, "max": 10000.0, "step": 0.01, "round": False}),
-            }
-        }
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="TCFGAdvanced",
+            display_name="Tangential Damping CFG (Advanced)",
+            category="advanced/guidance",
+            inputs=[
+                io.Model.Input("model"),
+                io.Float.Input("multiplier", default=0.5, min=0.0, max=1.0, step=0.01, round=0.01),
+                io.Float.Input("sigma_start", default=-1.0, min=-1.0, max=10000.0, step=0.01, round=False),
+                io.Float.Input("sigma_end", default=-1.0, min=-1.0, max=10000.0, step=0.01, round=False),
+            ],
+            outputs=[
+                io.Model.Output(),
+            ],
+            description="TCFG – Tangential Damping CFG (2503.18137)\n\nRefine the uncond (negative) to align with the cond (positive) for improving quality.",
+        )
 
-    RETURN_TYPES = (IO.MODEL,)
-    RETURN_NAMES = ("patched_model",)
-    FUNCTION = "patch"
+    @classmethod
+    def execute(cls, **kwargs) -> io.NodeOutput:
+        model: ModelPatcher = kwargs["model"]
+        multiplier: float = kwargs["multiplier"]
+        sigma_start: float = kwargs["sigma_start"]
+        sigma_end: float = kwargs["sigma_end"]
 
-    CATEGORY = "advanced/guidance"
-    DESCRIPTION = "TCFG – Tangential Damping CFG (2503.18137)\n\nRefine the uncond (negative) to align with the cond (positive) for improving quality."
-
-    def patch(self, model: ModelPatcher, multiplier: float, sigma_start: float, sigma_end: float):
         m: ModelPatcher = model.clone()
 
         def tangential_damping_cfg(args):
@@ -364,28 +414,30 @@ class TCFGAdvanced(ComfyNodeABC):
             return [cond_pred, uncond_pred_final] + conds_out[2:]
 
         m.set_model_sampler_pre_cfg_function(tangential_damping_cfg)
-        return (m,)
+        return io.NodeOutput(m)
 
 
-class SkipFirstStepCFG(ComfyNodeABC):
+class SkipFirstStepCFG(io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(cls) -> InputTypeDict:
-        return {
-            "required": {
-                "model": (IO.MODEL, {}),
-                "skip_percent": (
-                    IO.FLOAT,
-                    {"default": 0.01, "min": 0.0, "max": 1.0, "step": 0.001},
-                ),
-            }
-        }
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="SkipFirstStepCFG",
+            display_name="Skip CFG on first step",
+            category="model_patches/unet",
+            inputs=[
+                io.Model.Input("model"),
+                io.Float.Input("skip_percent", default=0.01, min=0.0, max=1.0, step=0.001),
+            ],
+            outputs=[
+                io.Model.Output(),
+            ],
+        )
 
-    RETURN_TYPES = (IO.MODEL,)
-    FUNCTION = "patch"
+    @classmethod
+    def execute(cls, **kwargs) -> io.NodeOutput:
+        model: ModelPatcher = kwargs["model"]
+        skip_percent: float = kwargs["skip_percent"]
 
-    CATEGORY = "model_patches/unet"
-
-    def patch(self, model: ModelPatcher, skip_percent: float):
         m: ModelPatcher = model.clone()
         prev_calc_cond_batch: Callable | None = m.model_options.get("sampler_calc_cond_batch_function")  # type: ignore
 
@@ -409,27 +461,16 @@ class SkipFirstStepCFG(ComfyNodeABC):
                 return comfy.samplers.calc_cond_batch(model, conds, x, timestep, model_options)
 
         m.set_model_sampler_calc_cond_batch_function(skip_first_step_cfg)
-        return (m,)
+        return io.NodeOutput(m)
 
 
-NODE_CLASS_MAPPINGS = {
-    "Guidance Limiter": GuidanceLimiter,
-    "CFGLimiterGuider": CFGLimiterGuider,
-    "RescaleCFGPost": RescaleCFGPost,
-    "DynamicThresholdingSimplePost": DynamicThresholdingSimplePost,
-    "DynamicThresholdingPost": DynamicThresholdingPost,
-    "RenormCFGPost": RenormCFGPost,
-    "TCFGAdvanced": TCFGAdvanced,
-    "SkipFirstStepCFG": SkipFirstStepCFG,
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "Guidance Limiter": "Guidance Limiter",
-    "CFGLimiterGuider": "CFGLimiterGuider",
-    "RescaleCFGPost": "RescaleCFGPost",
-    "DynamicThresholdingSimplePost": "DynamicThresholdingSimplePost",
-    "DynamicThresholdingPost": "DynamicThresholdingFullPost",
-    "RenormCFGPost": "RenormCFGPost",
-    "TCFGAdvanced": "Tangential Damping CFG (Advanced)",
-    "SkipFirstStepCFG": "Skip CFG on first step",
-}
+NODES = [
+    GuidanceLimiter,
+    CFGLimiterGuider,
+    RescaleCFGPost,
+    DynamicThresholdingSimplePost,
+    DynamicThresholdingPost,
+    RenormCFGPost,
+    TCFGAdvanced,
+    SkipFirstStepCFG,
+]

@@ -39,7 +39,7 @@ class PPMExtension(ComfyExtension):
             *v3_schema_stub(clip_misc),
             *clip_negpip.NODES,
             *v3_schema_stub(freeu_adv),
-            *v3_schema_stub(guidance),
+            *guidance.NODES,
             *image_misc.NODES,
             *v3_schema_stub(latent_misc),
             *v3_schema_stub(latent_tonemap),
