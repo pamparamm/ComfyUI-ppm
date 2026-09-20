@@ -1,10 +1,11 @@
+import math
 from typing import Callable, Literal
 
 import torch
 
 import comfy.samplers
 from comfy.model_patcher import ModelPatcher
-from comfy.model_sampling import ModelSamplingDiscrete
+from comfy.model_sampling import ModelSamplingContinuousEDM
 from comfy_api.latest import io
 from comfy_extras.nodes_tcfg import score_tangential_damping
 
@@ -448,7 +449,7 @@ class SkipFirstStepCFG(io.ComfyNode):
             timestep: torch.Tensor = args["sigma"]
             model_options = args["model_options"]
 
-            model_sampling: ModelSamplingDiscrete = model.model_sampling
+            model_sampling: ModelSamplingContinuousEDM = model.model_sampling
             sigma_val = model_sampling.percent_to_sigma(skip_percent)
 
             if timestep[0] > sigma_val:
@@ -464,6 +465,48 @@ class SkipFirstStepCFG(io.ComfyNode):
         return io.NodeOutput(m)
 
 
+class C2FG(io.ComfyNode):
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="C2FG",
+            display_name="C2FG",
+            category="model_patches/unet",
+            inputs=[
+                io.Model.Input("model"),
+                io.Float.Input("growth_rate", default=1.0, min=0.0, max=1.0, step=0.01),
+            ],
+            outputs=[
+                io.Model.Output(),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, **kwargs) -> io.NodeOutput:
+        model: ModelPatcher = kwargs["model"]
+        growth_rate: float = kwargs["growth_rate"]
+
+        m: ModelPatcher = model.clone()
+        prev_cfg = m.model_options.get("sampler_cfg_function")
+        model_sampling: ModelSamplingContinuousEDM = m.get_model_object("model_sampling")  # type: ignore
+
+        def c2fg_cfg(args):
+            scale: float = args["cond_scale"]
+            sigma: float = args["sigma"][0].item()
+            sigma_max: float = model_sampling.sigma_max.item()
+
+            scale_t = scale * math.exp(growth_rate * (1.0 - sigma / sigma_max))
+            if prev_cfg is not None:
+                return prev_cfg({**args, "cond_scale": scale_t})
+
+            cond = args["cond"]
+            uncond = args["uncond"]
+            return uncond + scale_t * (cond - uncond)
+
+        m.set_model_sampler_cfg_function(c2fg_cfg)
+        return io.NodeOutput(m)
+
+
 NODES = [
     GuidanceLimiter,
     CFGLimiterGuider,
@@ -473,4 +516,5 @@ NODES = [
     RenormCFGPost,
     TCFGAdvanced,
     SkipFirstStepCFG,
+    C2FG,
 ]
