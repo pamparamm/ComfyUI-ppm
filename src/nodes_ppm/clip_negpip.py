@@ -5,7 +5,7 @@ from functools import partial
 from typing import Any
 
 from comfy.ldm.flux.model import Flux as FluxDIT
-from comfy.model_base import SDXL, Anima, BaseModel, Flux, SDXLRefiner
+from comfy.model_base import SDXL, Anima, BaseModel, Flux, MOSSImage, SDXLRefiner
 from comfy.model_patcher import ModelPatcher
 from comfy.sd import CLIP
 from comfy_api.latest import io
@@ -13,6 +13,7 @@ from comfy_api.latest import io
 from ..compat.advanced_encode import patch_adv_encode
 from ..negpip.anima_negpip import patch_anima_negpip
 from ..negpip.flux_negpip import flux_forward_orig_negpip
+from ..negpip.moss_negpip import patch_moss_negpip
 from ..negpip.unet_negpip import encode_token_weights_negpip, sdxl_attn2_negpip
 
 NEGPIP_KEY = "ppm_negpip"
@@ -22,6 +23,7 @@ SUPPORTED_ENCODERS = [
     "t5xxl",
     "llama",
     "qwen3_06b",
+    "qwen35_9b",
 ]
 
 
@@ -98,6 +100,11 @@ class CLIPNegPip(io.ComfyNode):
         # Anima
         if issubclass(model_type, Anima):
             patch_anima_negpip(m)
+            return True
+
+        # MOSS-Image
+        if issubclass(model_type, MOSSImage):
+            patch_moss_negpip(m, c, encoders[0])
             return True
 
         return False

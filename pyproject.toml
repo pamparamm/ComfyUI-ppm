@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-ppm"
-version = "1.1.11"
-description = "Attention Couple for SDXL and Anima; NegPiP (negative weights in prompts) for SDXL and Anima; etc."
+version = "1.1.12"
+description = "Attention Couple for SDXL and Anima; NegPiP (negative weights in prompts) for SDXL, Anima and MOSS-Image; etc."
 license = "AGPL-3.0-or-later"
 license-files = ["LICENSE"]
 
