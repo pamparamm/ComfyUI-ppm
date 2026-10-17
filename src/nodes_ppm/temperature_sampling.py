@@ -8,7 +8,7 @@ import torch
 import comfy.patcher_extension
 from comfy.model_patcher import ModelPatcher
 from comfy.model_sampling import (
-    ModelSamplingContinuousV,
+    ModelSamplingContinuousEDM,
     ModelSamplingDiscrete,
     ModelSamplingDiscreteFlow,
     ModelSamplingFlux,
@@ -71,7 +71,7 @@ class TemperatureSamplingPPM(io.ComfyNode):
         model_sampling = m.get_model_object("model_sampling")  # type: ignore
         if isinstance(model_sampling, (ModelSamplingDiscreteFlow, ModelSamplingFlux)):
             flow = True
-        elif isinstance(model_sampling, (ModelSamplingDiscrete, ModelSamplingContinuousV)):
+        elif isinstance(model_sampling, (ModelSamplingDiscrete, ModelSamplingContinuousEDM)):
             flow = False
         else:
             raise ValueError(f"Unsupported model sampling: {type(model_sampling).__name__}")

@@ -85,11 +85,18 @@ Implementation of [Applying Guidance in a Limited Interval Improves Sample and D
 
 Guidance Limiter is also available as a `CFGLimiterGuider` guider node for `SamplerCustomAdvanced`.
 
+### C2FG
+
+Implementation of [C2FG: Control Classifier-Free Guidance via Score Discrepancy Analysis by Gao et al.](https://arxiv.org/abs/2603.08155) as a time-dependent CFG scale: `cfg * exp(growth_rate * (1 - t/t_max))`.
+
+Improves overall image clarity and enhances small details by boosting CFG at later stages of denoising.
+Should be compatible with any model that is not CFG-distilled (the node doesn't work when CFG is set to 1.0).
+
+Guidance is equal to the `cfg` from the sampler at the highest noise level and grows to `cfg * e^growth_rate` by the last steps. Set `growth_rate` to `0.0` to disable the schedule (`1.0` is the best value from the paper).
+
 ### Temperature Sampling (PPM)
 
 Implementation of [Diversify Diffusion with Temperature Sampling and Variance-Corrective Time Shifting (Li et al., 2026)](https://arxiv.org/abs/2607.10853).
-
-Currently doesn't work well with ancestral/SDE samplers.
 
 - `gamma` < 1.0 increases sampling diversity, 1.0 disables temperature sampling.
 - `start_percent`/`end_percent` sets sampling window.

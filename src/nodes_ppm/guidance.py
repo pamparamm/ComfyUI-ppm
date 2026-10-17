@@ -489,13 +489,16 @@ class C2FG(io.ComfyNode):
         m: ModelPatcher = model.clone()
         prev_cfg = m.model_options.get("sampler_cfg_function")
         model_sampling: ModelSamplingContinuousEDM = m.get_model_object("model_sampling")  # type: ignore
+        t_min = model_sampling.timestep(model_sampling.sigma_min).item()
+        t_max = model_sampling.timestep(model_sampling.sigma_max).item()
 
         def c2fg_cfg(args):
             scale: float = args["cond_scale"]
-            sigma: float = args["sigma"][0].item()
-            sigma_max: float = model_sampling.sigma_max.item()
 
-            scale_t = scale * math.exp(growth_rate * (1.0 - sigma / sigma_max))
+            timestep = model_sampling.timestep(args["sigma"])
+            t = (timestep[0].item() - t_min) / (t_max - t_min)
+
+            scale_t = scale * math.exp(growth_rate * (1.0 - t))
             if prev_cfg is not None:
                 return prev_cfg({**args, "cond_scale": scale_t})
 

@@ -52,8 +52,12 @@ class EmptyLatentImageAR(ComfyNodeABC):
     def generate(self, resolution: int, ratio: float, step: int, batch_size=1):
         width, height = _calc_dimensions(resolution, ratio, step)
 
-        latent = torch.zeros([batch_size, 4, height // 8, width // 8], device=self.device)
-        return ({"samples": latent},)
+        latent = torch.zeros(
+            [batch_size, 4, height // 8, width // 8],
+            device=comfy.model_management.intermediate_device(),
+            dtype=comfy.model_management.intermediate_dtype(),
+        )
+        return ({"samples": latent, "downscale_ratio_spacial": 8},)
 
 
 class LatentToWidthHeight(ComfyNodeABC):
