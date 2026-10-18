@@ -78,8 +78,24 @@ function el(tag, css, attrs) {
     return node;
 }
 
+function options(select, pairs) {
+    for (const [value, label] of pairs) {
+        const option = el("option", "", { value });
+        option.textContent = label;
+        select.append(option);
+    }
+}
+
 function getWidget(node, name) {
     return node.widgets?.find((w) => w.name === name);
+}
+
+// A linked widget is display-only, so writing it must not mark the graph dirty.
+function setWidgetValue(node, name, value) {
+    const widget = getWidget(node, name);
+    if (!widget || widget.value === value) return;
+    widget.value = value;
+    if (!isLinkedInput(node, name)) widget.callback?.(value);
 }
 
 function dims(node) {
@@ -88,6 +104,20 @@ function dims(node) {
         return typeof v === "number" && v > 0 ? v : fallback;
     };
     return [pick("width", 1024), pick("height", 1024)];
+}
+
+function isLinkedInput(node, name) {
+    const slot = node.findInputSlot?.(name) ?? -1;
+    return slot >= 0 && node.isInputConnected?.(slot) === true;
+}
+
+// width/height can be driven by links: once linked, the widget value is stale
+// (or gone) and only the size the node ran with describes the canvas.
+function dimsOf(st, node) {
+    const local = dims(node);
+    if (!st.runDims) return local;
+    const untouched = local[0] === st.widgetDims[0] && local[1] === st.widgetDims[1];
+    return untouched ? st.runDims : local;
 }
 
 function isBox(b) {
@@ -374,10 +404,15 @@ function sync(st, node) {
     requestDraw(st);
 }
 
+function commit(st, node) {
+    renderInspector(st, node);
+    sync(st, node);
+}
+
 function readState(st, node) {
     const target = getWidget(node, "editor_state");
     st.loadedFrom = target?.value;
-    st.dims = dims(node);
+    st.dims = dimsOf(st, node);
     st.regions = toRegions(Array.isArray(st.loadedFrom) ? st.loadedFrom : [], st.dims[0], st.dims[1]);
     if (st.active >= st.regions.length) st.active = st.regions.length ? 0 : -1;
     renderInspector(st, node);
@@ -388,8 +423,7 @@ function removeRegion(st, node, i) {
     st.regions.splice(i, 1);
     if (!st.regions.length) st.active = -1;
     else if (i <= st.active) st.active = Math.max(0, st.active - 1);
-    renderInspector(st, node);
-    sync(st, node);
+    commit(st, node);
 }
 
 function activeRegion(st) {
@@ -404,8 +438,7 @@ function widgetHeight(st, node) {
     let box, chrome;
     const minChrome = TOOLBAR_H + ROW_GAP + WRAP_BORDER;
     if (st.root?.isConnected && st.canvasWrap?.clientWidth && st.root.clientHeight > st.canvasWrap.clientHeight) {
-        // Measure the real chrome instead of estimating it, so the canvas lands
-        // exactly on the aspect ratio in one layout pass.
+        // Measured chrome lands the canvas on the aspect ratio in one layout pass.
         box = st.canvasWrap.clientWidth;
         chrome = st.root.clientHeight - st.canvasWrap.clientHeight;
     } else {
@@ -466,8 +499,7 @@ function makeSwatch(st, node, index, hex) {
         const b = activeRegion(st);
         if (!b) return;
         b.palette.splice(index, 1);
-        renderInspector(st, node);
-        sync(st, node);
+        commit(st, node);
     });
     swatch.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return;
@@ -506,8 +538,7 @@ function bindSwatchDrag(st, node) {
         next.splice(to, 0, moved);
         b.palette = next;
         st.swatchMovedAt = performance.now() + 250;
-        renderInspector(st, node);
-        sync(st, node);
+        commit(st, node);
     });
     document.addEventListener("pointerup", () => { st.swatchDrag = null; });
     document.addEventListener("pointercancel", () => { st.swatchDrag = null; });
@@ -691,11 +722,7 @@ function openPicker(st, node, index, anchor) {
     const rgbRow = el("div", "display:none;gap:4px;flex:1;min-width:0;");
     rgbRow.append(...rgbInputs);
     const modeSelect = el("select", FIELD + "flex:0 0 auto;width:62px;padding:3px 2px;", { title: "Color format" });
-    for (const [value, label] of [["hex", "Hex"], ["rgba", "RGBA"]]) {
-        const option = el("option", "", { value });
-        option.textContent = label;
-        modeSelect.append(option);
-    }
+    options(modeSelect, [["hex", "Hex"], ["rgba", "RGBA"]]);
     const fieldRow = el("div", "display:flex;gap:6px;align-items:center;");
     fieldRow.append(modeSelect, hexInput, rgbRow);
     pop.append(sv, hue, fieldRow);
@@ -768,36 +795,45 @@ function loadBackground(st, node, imageInfo) {
     img.onload = () => {
         st.bg = img;
         const snap = (v) => Math.max(DIM_STEP, Math.round(v / DIM_STEP) * DIM_STEP);
-        for (const [name, value] of [["width", snap(img.naturalWidth)], ["height", snap(img.naturalHeight)]]) {
-            const widget = getWidget(node, name);
-            if (widget && widget.value !== value) {
-                widget.value = value;
-                widget.callback?.(value);
-            }
-        }
-        st.dims = dims(node);
+        setWidgetValue(node, "width", snap(img.naturalWidth));
+        setWidgetValue(node, "height", snap(img.naturalHeight));
+        st.dims = dimsOf(st, node);
         sync(st, node);
     };
     img.src = api.apiURL(`/view?${params}`);
 }
 
+// The saved boxes are pixel coordinates, so re-read them in the new frame.
+function applyDims(st, node, dimsMessage) {
+    const [w, h] = Array.isArray(dimsMessage) ? dimsMessage : [];
+    if (typeof w !== "number" || typeof h !== "number" || w <= 0 || h <= 0) return;
+    if (st.dragging) return;
+    st.widgetDims = dims(node);
+    st.runDims = [w, h];
+    setWidgetValue(node, "width", w);
+    setWidgetValue(node, "height", h);
+    readState(st, node);
+    fitNode(st, node);
+}
+
 function applyExecuted(st, node, message) {
     if (!message) return;
+
+    applyDims(st, node, message.dims);
 
     const incoming = message.input_bboxes;
     if (Array.isArray(incoming) && incoming.length) {
         const last = getWidget(node, "last_incoming");
         const applied = Array.isArray(last?.value) ? last.value : [];
         if (JSON.stringify(incoming) !== JSON.stringify(applied)) {
-            st.dims = dims(node);
+            st.dims = dimsOf(st, node);
             st.regions = toRegions(incoming, st.dims[0], st.dims[1]);
             st.active = st.regions.length ? 0 : -1;
             if (last) {
-                last.value = JSON.parse(JSON.stringify(incoming));
+                last.value = incoming;
                 if (node.graph) node.graph.incrementVersion();
             }
-            renderInspector(st, node);
-            sync(st, node);
+            commit(st, node);
         }
     }
 
@@ -820,20 +856,25 @@ function hideInternalWidgets(node) {
     setCanvasSurface(node, "editor_state", "never");
 }
 
-function updateSurfaces(node) {
-    const slot = node.findInputSlot?.("background") ?? -1;
-    const connected = slot >= 0 && node.isInputConnected?.(slot) === true;
-    setCanvasSurface(node, "width", connected ? "never" : "shown");
-    setCanvasSurface(node, "height", connected ? "never" : "shown");
+function updateSurfaces(st, node) {
+    const fromImage = isLinkedInput(node, "background");
+    // Nothing replaces the image once the background input is gone.
+    if (st.bg && !fromImage) {
+        st.bg = null;
+        requestDraw(st);
+    }
+    for (const name of ["width", "height"]) {
+        setCanvasSurface(node, name, fromImage || isLinkedInput(node, name) ? "never" : "shown");
+    }
 }
 
 function maintain(st, node) {
-    updateSurfaces(node);
+    updateSurfaces(st, node);
     positionPicker(st);
     const target = getWidget(node, "editor_state");
     const ours = st.dragging || performance.now() - st.syncedAt < 300;
     if (!ours && target && target.value !== st.loadedFrom) readState(st, node);
-    const [w, h] = dims(node);
+    const [w, h] = dimsOf(st, node);
     if (w !== st.dims[0] || h !== st.dims[1]) {
         st.dims = [w, h];
         fitNode(st, node);
@@ -867,8 +908,7 @@ function buildUi(st, node) {
         st.active = -1;
         const last = getWidget(node, "last_incoming");
         if (last) last.value = [];
-        renderInspector(st, node);
-        sync(st, node);
+        commit(st, node);
     });
     toolbar.append(st.gridButton, clearButton);
 
@@ -881,17 +921,12 @@ function buildUi(st, node) {
 
     st.inspector = el("div", "flex:0 0 auto;flex-direction:column;gap:4px;padding:4px;border-radius:4px;background:#202020;display:none;");
     st.typeSelect = el("select", FIELD, { title: "Box type" });
-    for (const [value, label] of [["obj", "Object"], ["text", "Text"]]) {
-        const option = el("option", "", { value });
-        option.textContent = label;
-        st.typeSelect.append(option);
-    }
+    options(st.typeSelect, [["obj", "Object"], ["text", "Text"]]);
     st.typeSelect.addEventListener("change", () => {
         const b = activeRegion(st);
         if (!b) return;
         b.type = st.typeSelect.value;
-        renderInspector(st, node);
-        sync(st, node);
+        commit(st, node);
     });
 
     st.textField = el("div", "flex-direction:column;gap:2px;");
@@ -919,8 +954,7 @@ function buildUi(st, node) {
         const b = activeRegion(st);
         if (!b || b.palette.length >= MAX_COLORS) return;
         b.palette.push(NEW_COLOR);
-        renderInspector(st, node);
-        sync(st, node);
+        commit(st, node);
     });
     st.palette.append(st.paletteAdd);
 
@@ -1037,10 +1071,6 @@ function bindCanvas(st, node) {
     });
 }
 
-function editorState(node) {
-    return editors.get(node.id)?.st;
-}
-
 function destroyEditor(entry) {
     if (!entry) return;
     closePicker(entry.st, true);
@@ -1078,6 +1108,8 @@ function attach(node) {
         bg: null,
         grid: true,
         dims: [1024, 1024],
+        runDims: undefined,
+        widgetDims: [1024, 1024],
         loadedFrom: undefined,
         syncedAt: 0,
         picker: null,
@@ -1122,6 +1154,14 @@ function attach(node) {
 
 app.registerExtension({
     name: "PPM.CreateBoundingBoxes",
+    setup() {
+        // The frontend does not call node.onExecuted for this node.
+        api.addEventListener("executed", ({ detail }) => {
+            for (const { node, st } of editors.values()) {
+                if (String(node.id) === String(detail.node)) applyExecuted(st, node, detail.output);
+            }
+        });
+    },
     async beforeRegisterNodeDef(nodeType, nodeData) {
         if (nodeData.name !== NODE_CLASS || nodeType._ppmBboxEditor) return;
         nodeType._ppmBboxEditor = true;
@@ -1133,17 +1173,11 @@ app.registerExtension({
             return result;
         };
 
-        const origExecuted = nodeType.prototype.onExecuted;
-        nodeType.prototype.onExecuted = function (message) {
-            origExecuted?.apply(this, [message]);
-            const st = editorState(this);
-            if (st) applyExecuted(st, this, message);
-        };
-
         const origConnectionsChange = nodeType.prototype.onConnectionsChange;
         nodeType.prototype.onConnectionsChange = function (...args) {
             const result = origConnectionsChange?.apply(this, args);
-            if (editors.has(this.id)) updateSurfaces(this);
+            const entry = editors.get(this.id);
+            if (entry) updateSurfaces(entry.st, this);
             return result;
         };
     },
