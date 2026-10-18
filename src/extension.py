@@ -6,6 +6,7 @@ from .compat.utils import v3_schema_stub
 from .nodes_ppm import (
     attention_couple_ppm,
     attention_selector,
+    bounding_boxes_ppm,
     cads_ppm,
     clip_misc,
     clip_negpip,
@@ -35,6 +36,7 @@ class PPMExtension(ComfyExtension):
         return [
             *attention_couple_ppm.NODES,
             *attention_selector.NODES,
+            *bounding_boxes_ppm.NODES,
             *cads_ppm.NODES,
             *v3_schema_stub(clip_misc),
             *clip_negpip.NODES,

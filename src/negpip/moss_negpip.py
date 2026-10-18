@@ -71,6 +71,15 @@ def moss_encode_token_weights_negpip_wrapper(previous_encode_token_weights: Call
 def moss_extra_conds_negpip_wrapper(previous_extra_conds: Callable[..., dict]):
     def _moss_extra_conds_negpip_wrapper(**kwargs):
         weights: torch.Tensor | None = kwargs.pop(TOKEN_WEIGHTS_KEY, None)
+        cross_attn = kwargs.get("cross_attn", None)
+        n_text = 0 if cross_attn is None else cross_attn.shape[1]
+
+        if weights is not None and weights.shape[-1] < n_text:
+            pad = weights.new_ones(*weights.shape[:-1], n_text - weights.shape[-1])
+            weights = torch.cat((weights, pad), dim=-1)
+        elif weights is not None and weights.shape[-1] > n_text:
+            weights = None
+
         out = previous_extra_conds(**kwargs)
 
         if weights is not None and not torch.all(weights == 1.0):

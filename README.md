@@ -132,6 +132,15 @@ A small lightweight wrapper over `ConditioningConcat` node. It splits prompts in
 
 Counts tokens in your prompt and returns them as a string. You can use `Preview Any` node to display them.
 
+### Create Bounding Boxes (PPM)
+
+Port of ComfyUI's `Create Bounding Boxes` node with a box editor that also works with **Nodes 2.0 disabled**.
+
+The stock box editor is a Vue-only widget: with Nodes 2.0 turned off, the classic canvas shows just a placeholder and the boxes cannot be edited. This node keeps the same inputs and outputs (`preview`, `bboxes`, `elements`) and adds a DOM widget editor for the classic canvas: draw/move/resize boxes with grid snapping, per-box type (object/text), text, description and color palette. With Nodes 2.0 enabled the stock Vue editor is used and the DOM editor stays hidden.
+
+- When `background` is connected, the canvas background and `width`/`height` are taken from the image after the node has run once.
+- A new value on the `bboxes` input re-initializes the canvas; canvas edits are kept until the upstream value changes again.
+
 ## Hooks/Hijacks
 
 ### Schedulers
