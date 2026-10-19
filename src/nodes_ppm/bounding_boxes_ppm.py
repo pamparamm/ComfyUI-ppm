@@ -18,6 +18,35 @@ def _to_pil(image: torch.Tensor) -> Image.Image:
     return Image.fromarray(arr)
 
 
+def _canvas_in_frame(boxes: list, width: int, height: int) -> list:
+    """Put canvas boxes in the frame the node is running with.
+
+    The canvas draws in relative coordinates and stamps the pixel frame it wrote a
+    box in, so a frame change (linked width/height) keeps the boxes where they are
+    instead of reading the old pixels against the new frame.
+    """
+    framed = []
+    for box in boxes:
+        meta = box.get("metadata") if isinstance(box, dict) else None
+        frame = meta.get("frame") if isinstance(meta, dict) else None
+        if not (
+            isinstance(frame, (list, tuple))
+            and len(frame) == 2
+            and all(isinstance(v, (int, float)) and v > 0 for v in frame)
+        ):
+            framed.append(box)
+            continue
+        sx, sy = width / frame[0], height / frame[1]
+        framed.append({
+            **box,
+            "x": box.get("x", 0) * sx,
+            "y": box.get("y", 0) * sy,
+            "width": box.get("width", 0) * sx,
+            "height": box.get("height", 0) * sy,
+        })
+    return framed
+
+
 class CreateBoundingBoxesPPM(io.ComfyNode):
     """Create Bounding Boxes with a canvas editor that also works on the classic canvas."""
 
@@ -101,7 +130,7 @@ class CreateBoundingBoxesPPM(io.ComfyNode):
         incoming = boxes_from_input(bboxes, width, height)
         applied = last_incoming if isinstance(last_incoming, list) else []
         upstream_changed = bool(incoming) and incoming != applied
-        source = incoming if upstream_changed else (editor_state or [])
+        source = incoming if upstream_changed else _canvas_in_frame(editor_state or [], width, height)
         regions = boxes_to_regions(source, width, height)
 
         has_background = background is not None and len(background) > 0

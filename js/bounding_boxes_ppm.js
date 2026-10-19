@@ -3,24 +3,15 @@ const { api } = window.comfyAPI.api;
 
 const NODE_CLASS = "CreateBoundingBoxesPPM";
 const WIDGET_NAME = "ppm_bboxes";
-const INTERNAL_WIDGETS = new Set(["last_incoming"]);
 
-const HANDLE_PX = 8;
 const MIN_CANVAS_PX = 24;
-const TOOLBAR_H = 24;
-const ROW_GAP = 4;
-const WRAP_BORDER = 2;
 const DEFAULT_NODE_W = 420;
-const BG_DIM = 0.75;
-const DIM_STEP = 16;
-const GRID_MIN_PX = 32;
-const GRID_MAX_CELLS = 64;
 const MAX_COLORS = 5;
-const FALLBACK_COLOR = "#8c8c8c";
-const NEW_COLOR = "#ffffff";
-const SWATCH_TIP = "Click edit · drag reorder · right-click remove";
 const PICKER_W = 195;
 const PICKER_SV_H = 120;
+// Between the node body and the canvas: the frontend insets DOM widgets by 10px
+// on every side, and the canvas wrap adds a 1px border of its own.
+const NODE_PAD = 10 * 2 + 2;
 
 const editors = new Map();
 
@@ -120,6 +111,13 @@ function dimsOf(st, node) {
     return untouched ? st.runDims : local;
 }
 
+// The canvas box carries the aspect ratio itself (see buildUi), so it has to
+// follow the dimensions the boxes are drawn against.
+function setDims(st, dims) {
+    st.dims = dims;
+    if (st.canvasWrap) st.canvasWrap.style.aspectRatio = `${dims[0]} / ${dims[1]}`;
+}
+
 function isBox(b) {
     return !!b && typeof b === "object" &&
         typeof b.x === "number" && typeof b.y === "number" &&
@@ -150,7 +148,10 @@ function toBoxes(regions, w, h) {
         y: Math.round(r.y * h),
         width: Math.round(r.w * w),
         height: Math.round(r.h * h),
-        metadata: { type: r.type, text: r.text, desc: r.desc, palette: [...r.palette] },
+        // The frame the pixels are drawn in: the node can run with a linked
+        // width/height the editor only learns about once it has executed, and the
+        // boxes have to be read in the frame they were written for.
+        metadata: { type: r.type, text: r.text, desc: r.desc, palette: [...r.palette], frame: [w, h] },
     }));
 }
 
@@ -190,8 +191,9 @@ function applyDrag(mode, start, dx, dy) {
 }
 
 function hitRegions(regions, px, py, logW, logH, active) {
-    const rx = HANDLE_PX / Math.max(1, logW);
-    const ry = HANDLE_PX / Math.max(1, logH);
+    const handlePx = 8;
+    const rx = handlePx / Math.max(1, logW);
+    const ry = handlePx / Math.max(1, logH);
     const hits = [];
     for (let i = 0; i < regions.length; i++) {
         const b = regions[i];
@@ -216,7 +218,8 @@ function hitRegions(regions, px, py, logW, logH, active) {
 
 function gridSteps(st) {
     const [w, h] = st.dims;
-    const axis = (size) => Math.max(GRID_MIN_PX, Math.ceil(size / GRID_MAX_CELLS)) / size;
+    // Cells never shrink below 32px and no axis gets more than 64 of them.
+    const axis = (size) => Math.max(32, Math.ceil(size / 64)) / size;
     return { fx: axis(w), fy: axis(h) };
 }
 
@@ -305,7 +308,7 @@ function draw(st) {
 
     if (st.bg) {
         ctx.drawImage(st.bg, 0, 0, W, H);
-        ctx.fillStyle = `rgba(0,0,0,${BG_DIM})`;
+        ctx.fillStyle = "rgba(0,0,0,0.75)";
         ctx.fillRect(0, 0, W, H);
     }
 
@@ -326,7 +329,7 @@ function draw(st) {
     for (let i = 0; i < st.regions.length; i++) {
         const b = st.regions[i];
         const active = i === st.active;
-        const color = b.palette.find(Boolean) || FALLBACK_COLOR;
+        const color = b.palette.find(Boolean) || "#8c8c8c";
         const x1 = b.x * W, y1 = b.y * H;
         const w = b.w * W, h = b.h * H;
         const hovered = active || i === st.hover;
@@ -412,7 +415,7 @@ function commit(st, node) {
 function readState(st, node) {
     const target = getWidget(node, "editor_state");
     st.loadedFrom = target?.value;
-    st.dims = dimsOf(st, node);
+    setDims(st, dimsOf(st, node));
     st.regions = toRegions(Array.isArray(st.loadedFrom) ? st.loadedFrom : [], st.dims[0], st.dims[1]);
     if (st.active >= st.regions.length) st.active = st.regions.length ? 0 : -1;
     renderInspector(st, node);
@@ -430,24 +433,30 @@ function activeRegion(st) {
     return st.active >= 0 ? st.regions[st.active] : undefined;
 }
 
-// The canvas keeps the width/height aspect ratio like the stock editor's CSS
-// aspect-ratio box: reporting the same value as min and max height pins it, so
-// stretching the node leaves dead space instead of distorting the boxes.
+// Toolbar, inspector and hint are content-sized, so measuring them is exact and
+// independent of the node height. Deriving the chrome from the node's own height
+// makes the reported widget height change from pass to pass, and the frontend
+// grows the node towards it once per frame: the node creeps until both agree.
+function chromeHeight(st) {
+    const ROW_GAP = 4;
+    // Before the editor is mounted nothing has a height yet, so fall back to the
+    // height each row settles on.
+    let chrome = (st.toolbar?.offsetHeight || 24) + ROW_GAP + NODE_PAD;
+    if (st.inspector?.style.display !== "none") chrome += (st.inspector?.offsetHeight || 110) + ROW_GAP;
+    if (st.hint?.style.display !== "none") chrome += (st.hint?.offsetHeight || 14) + ROW_GAP;
+    return chrome;
+}
+
+// Reporting the same value as min and max height pins the canvas to its own
+// aspect-ratio box (like the stock editor), so stretching the node vertically
+// leaves dead space instead of distorting the boxes.
 function widgetHeight(st, node) {
+    // Measured so the node is sized for what the layout really renders; the maths
+    // only covers the pre-mount pass, where nothing has a size yet.
+    if (st.canvasWrap?.clientHeight) return st.canvasWrap.clientHeight + chromeHeight(st);
     const [dw, dh] = st.dims;
-    let box, chrome;
-    const minChrome = TOOLBAR_H + ROW_GAP + WRAP_BORDER;
-    if (st.root?.isConnected && st.canvasWrap?.clientWidth && st.root.clientHeight > st.canvasWrap.clientHeight) {
-        // Measured chrome lands the canvas on the aspect ratio in one layout pass.
-        box = st.canvasWrap.clientWidth;
-        chrome = st.root.clientHeight - st.canvasWrap.clientHeight;
-    } else {
-        box = Math.max(1, (st.widget?.width ?? node.width ?? DEFAULT_NODE_W) - WRAP_BORDER);
-        chrome = minChrome;
-        if (st.inspector?.style.display !== "none") chrome += (st.inspector?.offsetHeight || 150) + ROW_GAP;
-        if (st.hint?.style.display !== "none") chrome += (st.hint?.offsetHeight || 14) + ROW_GAP;
-    }
-    return Math.max(MIN_CANVAS_PX, Math.round((box * dh) / Math.max(1, dw))) + Math.max(minChrome, chrome);
+    const box = Math.max(1, (st.widget?.width ?? node.width ?? DEFAULT_NODE_W) - NODE_PAD);
+    return Math.max(MIN_CANVAS_PX, Math.round((box * dh) / Math.max(1, dw))) + chromeHeight(st);
 }
 
 function fitNode(st, node) {
@@ -460,28 +469,29 @@ function renderInspector(st, node) {
     const b = activeRegion(st);
     st.inspector.style.display = b ? "flex" : "none";
     st.hint.style.display = b || !st.regions.length ? "none" : "block";
-    fitNode(st, node);
-    if (!b) {
+    st.textField.style.display = b?.type === "text" ? "flex" : "none";
+    if (b) {
+        if (st.typeSelect.value !== b.type) st.typeSelect.value = b.type;
+        if (document.activeElement !== st.textInput) st.textInput.value = b.text;
+        if (document.activeElement !== st.descInput) st.descInput.value = b.desc;
+
+        const swatches = b.palette.map((color, i) => makeSwatch(st, node, i, color));
+        st.palette.replaceChildren(...swatches, st.paletteAdd);
+        st.paletteAdd.style.display = b.palette.length < MAX_COLORS ? "" : "none";
+        closePicker(st);
+    } else {
         closePicker(st, true);
-        return;
     }
-
-    if (st.typeSelect.value !== b.type) st.typeSelect.value = b.type;
-    st.textField.style.display = b.type === "text" ? "flex" : "none";
-    if (document.activeElement !== st.textInput) st.textInput.value = b.text;
-    if (document.activeElement !== st.descInput) st.descInput.value = b.desc;
-
-    const swatches = b.palette.map((color, i) => makeSwatch(st, node, i, color));
-    st.palette.replaceChildren(...swatches, st.paletteAdd);
-    st.paletteAdd.style.display = b.palette.length < MAX_COLORS ? "" : "none";
-    closePicker(st);
+    // Size only once every row is in its final state, otherwise the reported
+    // height is one toggle behind and has to be corrected again next frame.
+    fitNode(st, node);
 }
 
 function makeSwatch(st, node, index, hex) {
     const swatch = el("button", "width:20px;height:20px;padding:0;border:1px solid #555;border-radius:3px;" +
         "cursor:pointer;touch-action:none;", {
         type: "button",
-        title: SWATCH_TIP,
+        title: "Click edit · drag reorder · right-click remove",
         "data-index": String(index),
     });
     swatch.style.background = hex;
@@ -794,10 +804,10 @@ function loadBackground(st, node, imageInfo) {
     const img = new Image();
     img.onload = () => {
         st.bg = img;
-        const snap = (v) => Math.max(DIM_STEP, Math.round(v / DIM_STEP) * DIM_STEP);
+        const snap = (v) => Math.max(16, Math.round(v / 16) * 16);
         setWidgetValue(node, "width", snap(img.naturalWidth));
         setWidgetValue(node, "height", snap(img.naturalHeight));
-        st.dims = dimsOf(st, node);
+        setDims(st, dimsOf(st, node));
         sync(st, node);
     };
     img.src = api.apiURL(`/view?${params}`);
@@ -812,7 +822,8 @@ function applyDims(st, node, dimsMessage) {
     st.runDims = [w, h];
     setWidgetValue(node, "width", w);
     setWidgetValue(node, "height", h);
-    readState(st, node);
+    setDims(st, dimsOf(st, node));
+    sync(st, node);
     fitNode(st, node);
 }
 
@@ -826,7 +837,7 @@ function applyExecuted(st, node, message) {
         const last = getWidget(node, "last_incoming");
         const applied = Array.isArray(last?.value) ? last.value : [];
         if (JSON.stringify(incoming) !== JSON.stringify(applied)) {
-            st.dims = dimsOf(st, node);
+            setDims(st, dimsOf(st, node));
             st.regions = toRegions(incoming, st.dims[0], st.dims[1]);
             st.active = st.regions.length ? 0 : -1;
             if (last) {
@@ -841,19 +852,27 @@ function applyExecuted(st, node, message) {
     if (background?.filename) loadBackground(st, node, background);
 }
 
-function setCanvasSurface(node, name, tier) {
-    const widget = getWidget(node, name);
-    const surfaces = widget?.visibility?.surfaces;
-    if (surfaces && surfaces.canvas !== tier) surfaces.canvas = tier;
+// A connected widget keeps its canvas row whatever the tier says: the node size
+// counts it while the widget layout skips it, so hiding one prints the dimmed
+// label over whatever is drawn there and leaves the row as dead space. Leave
+// those to the frontend, which dims the row instead. Every write moves a whole
+// row in or out of the layout, so the node has to be sized again.
+function setCanvasSurface(st, node, name, tier) {
+    const surfaces = getWidget(node, name)?.visibility?.surfaces;
+    if (!surfaces) return;
+    const canvas = tier === "never" && isLinkedInput(node, name) ? "shown" : tier;
+    if (surfaces.canvas === canvas) return;
+    surfaces.canvas = canvas;
+    st.needsFit = true;
 }
 
 // The Vue editor renders for every BOUNDING_BOXES widget, and the frontend only
 // hides the internal ones on the core CreateBoundingBoxes node.
-function hideInternalWidgets(node) {
+function hideInternalWidgets(st, node) {
     for (const widget of node.widgets ?? []) {
-        if (INTERNAL_WIDGETS.has(widget.name)) widget.hidden = true;
+        if (widget.name === "last_incoming") widget.hidden = true;
     }
-    setCanvasSurface(node, "editor_state", "never");
+    setCanvasSurface(st, node, "editor_state", "never");
 }
 
 function updateSurfaces(st, node) {
@@ -863,8 +882,9 @@ function updateSurfaces(st, node) {
         st.bg = null;
         requestDraw(st);
     }
+    setCanvasSurface(st, node, "editor_state", "never");
     for (const name of ["width", "height"]) {
-        setCanvasSurface(node, name, fromImage || isLinkedInput(node, name) ? "never" : "shown");
+        setCanvasSurface(st, node, name, fromImage ? "never" : "shown");
     }
 }
 
@@ -876,9 +896,21 @@ function maintain(st, node) {
     if (!ours && target && target.value !== st.loadedFrom) readState(st, node);
     const [w, h] = dimsOf(st, node);
     if (w !== st.dims[0] || h !== st.dims[1]) {
-        st.dims = [w, h];
+        setDims(st, [w, h]);
         fitNode(st, node);
-        requestDraw(st);
+        // editor_state holds pixels for the current frame, so re-emit them (like
+        // the stock editor's watch on width/height); re-reading them against the
+        // new frame would squish every box.
+        sync(st, node);
+    }
+    // The size set while attaching uses static chrome estimates because the editor
+    // is not in the document yet, and a link change adds or removes widget rows:
+    // correct the node on the next draw, once the layout has settled.
+    if (st.needsFit && st.root?.isConnected) {
+        st.needsFit = false;
+        fitNode(st, node);
+        // Nothing else resizes the node here, and setSize does not ask for a redraw.
+        node.setDirtyCanvas(true, true);
     }
 }
 
@@ -892,7 +924,7 @@ function buildUi(st, node) {
         "overflow:hidden;color:#ddd;font:11px monospace;user-select:none;");
     st.root.className = "ppm-bbox-editor";
 
-    const toolbar = el("div", "flex:0 0 auto;display:flex;gap:4px;align-items:center;");
+    st.toolbar = el("div", "flex:0 0 auto;display:flex;gap:4px;align-items:center;");
     st.gridButton = el("button", TOOLBAR_BTN, { type: "button", title: "Toggle grid snapping" });
     st.gridButton.textContent = "Grid";
     st.gridButton.addEventListener("click", () => {
@@ -910,9 +942,14 @@ function buildUi(st, node) {
         if (last) last.value = [];
         commit(st, node);
     });
-    toolbar.append(st.gridButton, clearButton);
+    st.toolbar.append(st.gridButton, clearButton);
 
-    st.canvasWrap = el("div", "position:relative;flex:1 1 auto;min-height:0;overflow:hidden;" +
+    // The canvas box carries its own aspect ratio (like the stock editor), so a
+    // node that is briefly too short clips its bottom rows instead of squashing
+    // the canvas: the element height only catches up with the node on the next
+    // draw, and flex would otherwise absorb that missing space here.
+    st.canvasWrap = el("div", "position:relative;flex:0 0 auto;box-sizing:content-box;overflow:hidden;" +
+        `aspect-ratio:1/1;min-height:${MIN_CANVAS_PX}px;` +
         "border:1px solid #4a4a4a;border-radius:4px;background:#181818;");
     st.canvas = el("canvas", "position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair;outline:none;", {
         tabindex: "0",
@@ -953,7 +990,7 @@ function buildUi(st, node) {
     st.paletteAdd.addEventListener("click", () => {
         const b = activeRegion(st);
         if (!b || b.palette.length >= MAX_COLORS) return;
-        b.palette.push(NEW_COLOR);
+        b.palette.push("#ffffff");
         commit(st, node);
     });
     st.palette.append(st.paletteAdd);
@@ -961,7 +998,7 @@ function buildUi(st, node) {
     st.inspector.append(st.typeSelect, st.textField, st.descInput, st.palette);
     st.hint = el("div", "flex:0 0 auto;padding:0 2px;color:#9a9a9a;display:none;", { title: "Select a box to edit it" });
     st.hint.textContent = "Click a region to edit it.";
-    st.root.append(toolbar, st.canvasWrap, st.inspector, st.hint);
+    st.root.append(st.toolbar, st.canvasWrap, st.inspector, st.hint);
 
     paintToolbar(st);
     bindCanvas(st, node);
@@ -1071,11 +1108,12 @@ function bindCanvas(st, node) {
     });
 }
 
-function destroyEditor(entry) {
-    if (!entry) return;
-    closePicker(entry.st, true);
-    entry.st.widget?.onRemove?.();
-    entry.st.root?.remove();
+function destroyEditor(node) {
+    const st = editors.get(node);
+    if (!st) return;
+    closePicker(st, true);
+    st.widget?.onRemove?.();
+    st.root?.remove();
 }
 
 // Our widget can outlive its slot in node.widgets (configure() replaces the widget
@@ -1089,12 +1127,12 @@ function purgeEditors(node) {
 }
 
 function attach(node) {
-    const previous = editors.get(node.id);
-    if (previous && previous.node === node && getWidget(node, WIDGET_NAME)) {
-        readState(previous.st, node);
-        return previous.st;
+    const previous = editors.get(node);
+    if (previous && getWidget(node, WIDGET_NAME)) {
+        readState(previous, node);
+        return previous;
     }
-    destroyEditor(previous);
+    destroyEditor(node);
     purgeEditors(node);
 
     const st = {
@@ -1117,10 +1155,11 @@ function attach(node) {
         colorMode: "hex",
         swatchDrag: null,
         swatchMovedAt: 0,
+        needsFit: true,
         raf: 0,
     };
-    editors.set(node.id, { node, st });
-    hideInternalWidgets(node);
+    editors.set(node, st);
+    hideInternalWidgets(st, node);
     if (typeof node.properties?.bboxGrid === "boolean") st.grid = node.properties.bboxGrid;
     buildUi(st, node);
 
@@ -1137,7 +1176,7 @@ function attach(node) {
     widget.onRemove = () => {
         closePicker(st, true);
         onRemove?.();
-        if (editors.get(node.id)?.st === st) editors.delete(node.id);
+        if (editors.get(node) === st) editors.delete(node);
     };
     st.widget = widget;
 
@@ -1157,7 +1196,7 @@ app.registerExtension({
     setup() {
         // The frontend does not call node.onExecuted for this node.
         api.addEventListener("executed", ({ detail }) => {
-            for (const { node, st } of editors.values()) {
+            for (const [node, st] of editors) {
                 if (String(node.id) === String(detail.node)) applyExecuted(st, node, detail.output);
             }
         });
@@ -1169,20 +1208,30 @@ app.registerExtension({
         const origConfigure = nodeType.prototype.onConfigure;
         nodeType.prototype.onConfigure = function (...args) {
             const result = origConfigure?.apply(this, args);
-            if (editors.has(this.id)) attach(this);
+            if (editors.has(this)) attach(this);
             return result;
         };
 
         const origConnectionsChange = nodeType.prototype.onConnectionsChange;
         nodeType.prototype.onConnectionsChange = function (...args) {
             const result = origConnectionsChange?.apply(this, args);
-            const entry = editors.get(this.id);
-            if (entry) updateSurfaces(entry.st, this);
+            const st = editors.get(this);
+            if (st) updateSurfaces(st, this);
             return result;
         };
     },
     nodeCreated(node) {
         if (node.comfyClass !== NODE_CLASS) return;
-        attach(node);
+        if (node.graph) {
+            attach(node);
+            return;
+        }
+        // Runs from the node constructor, before the graph has this node.
+        const onAdded = node.onAdded;
+        node.onAdded = function (...args) {
+            const result = onAdded?.apply(this, args);
+            attach(this);
+            return result;
+        };
     },
 });
