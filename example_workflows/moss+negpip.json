@@ -1,0 +1,750 @@
+{
+  "id": "fbf68094-bf31-4c31-8deb-645c2fb20f54",
+  "revision": 0,
+  "last_node_id": 83,
+  "last_link_id": 195,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "UNETLoader",
+      "pos": [
+        200,
+        30
+      ],
+      "size": [
+        270,
+        110
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            187
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "UNETLoader"
+      },
+      "widgets_values": [
+        "moss/moss_image_sft_int8_convrot_split_qkv.safetensors",
+        "default",
+        "default"
+      ],
+      "widgets_values_named": {
+        "unet_name": "moss/moss_image_sft_int8_convrot_split_qkv.safetensors",
+        "weight_dtype": "default",
+        "device": "default"
+      }
+    },
+    {
+      "id": 2,
+      "type": "CLIPLoader",
+      "pos": [
+        200,
+        480
+      ],
+      "size": [
+        270,
+        110
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            40
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPLoader"
+      },
+      "widgets_values": [
+        "qwen/qwen3.5_9b_bf16.safetensors",
+        "moss_image",
+        "default"
+      ],
+      "widgets_values_named": {
+        "clip_name": "qwen/qwen3.5_9b_bf16.safetensors",
+        "type": "moss_image",
+        "device": "default"
+      }
+    },
+    {
+      "id": 3,
+      "type": "VAELoader",
+      "pos": [
+        200,
+        630
+      ],
+      "size": [
+        270,
+        90
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            16
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAELoader"
+      },
+      "widgets_values": [
+        "dit/flux2-vae_small.safetensors",
+        "default"
+      ],
+      "widgets_values_named": {
+        "vae_name": "dit/flux2-vae_small.safetensors",
+        "device": "default"
+      }
+    },
+    {
+      "id": 5,
+      "type": "SamplerCustom",
+      "pos": [
+        1050,
+        280
+      ],
+      "size": [
+        280,
+        460
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 191
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 192
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 193
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "link": 177
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 5
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 24
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "LATENT",
+          "links": [
+            112
+          ]
+        },
+        {
+          "name": "denoised_output",
+          "type": "LATENT",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SamplerCustom"
+      },
+      "widgets_values": [
+        true,
+        3,
+        "fixed",
+        5
+      ],
+      "widgets_values_named": {
+        "add_noise": true,
+        "noise_seed": 3,
+        "control_after_generate": "fixed",
+        "cfg": 5
+      }
+    },
+    {
+      "id": 8,
+      "type": "BasicScheduler",
+      "pos": [
+        1050,
+        130
+      ],
+      "size": [
+        280,
+        110
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 190
+        }
+      ],
+      "outputs": [
+        {
+          "name": "SIGMAS",
+          "type": "SIGMAS",
+          "links": [
+            5
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "BasicScheduler"
+      },
+      "widgets_values": [
+        "sgm_uniform",
+        50,
+        1
+      ],
+      "widgets_values_named": {
+        "scheduler": "sgm_uniform",
+        "steps": 50,
+        "denoise": 1
+      }
+    },
+    {
+      "id": 17,
+      "type": "VAEDecode",
+      "pos": [
+        1360,
+        30
+      ],
+      "size": [
+        140,
+        50
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 112
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 16
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            99
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAEDecode"
+      }
+    },
+    {
+      "id": 18,
+      "type": "PreviewImage",
+      "pos": [
+        1360,
+        120
+      ],
+      "size": [
+        570,
+        620
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 99
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreviewImage"
+      },
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 20,
+      "type": "EmptyLatentImageAR",
+      "pos": [
+        770,
+        510
+      ],
+      "size": [
+        270,
+        130
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            24
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "EmptyLatentImageAR"
+      },
+      "widgets_values": [
+        1024,
+        1,
+        8,
+        1
+      ],
+      "widgets_values_named": {
+        "resolution": 1024,
+        "ratio": 1,
+        "step": 8,
+        "batch_size": 1
+      }
+    },
+    {
+      "id": 21,
+      "type": "ModelSamplingAuraFlow",
+      "pos": [
+        200,
+        180
+      ],
+      "size": [
+        270,
+        90
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 187
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            188
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ModelSamplingAuraFlow"
+      },
+      "widgets_values": [
+        5,
+        "flow"
+      ],
+      "widgets_values_named": {
+        "shift": 5,
+        "sampling": "flow"
+      }
+    },
+    {
+      "id": 28,
+      "type": "CLIPNegPip",
+      "pos": [
+        480,
+        30
+      ],
+      "size": [
+        150,
+        50
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 189
+        },
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 40
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            190,
+            191
+          ]
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            194,
+            195
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPNegPip"
+      }
+    },
+    {
+      "id": 57,
+      "type": "SkipLayerGuidanceDiTSimple",
+      "pos": [
+        200,
+        310
+      ],
+      "size": [
+        270,
+        130
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 188
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            189
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SkipLayerGuidanceDiTSimple"
+      },
+      "widgets_values": [
+        "",
+        "22",
+        0,
+        1
+      ],
+      "widgets_values_named": {
+        "double_layers": "",
+        "single_layers": "22",
+        "start_percent": 0,
+        "end_percent": 1
+      }
+    },
+    {
+      "id": 81,
+      "type": "KSamplerSelect",
+      "pos": [
+        1050,
+        30
+      ],
+      "size": [
+        280,
+        60
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "SAMPLER",
+          "type": "SAMPLER",
+          "links": [
+            177
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "KSamplerSelect"
+      },
+      "widgets_values": [
+        "euler"
+      ],
+      "widgets_values_named": {
+        "sampler_name": "euler"
+      }
+    },
+    {
+      "id": 82,
+      "type": "CLIPTextEncode",
+      "pos": [
+        640,
+        30
+      ],
+      "size": [
+        400,
+        270
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 195
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            192
+          ]
+        }
+      ],
+      "title": "Cond",
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "Mario wearing a (red:-1) cap.\nScene: (simple background:-1), (blurry:-1), castle."
+      ],
+      "widgets_values_named": {
+        "text": "Mario wearing a (red:-1) cap.\nScene: (simple background:-1), (blurry:-1), castle."
+      }
+    },
+    {
+      "id": 83,
+      "type": "CLIPTextEncode",
+      "pos": [
+        640,
+        340
+      ],
+      "size": [
+        400,
+        130
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 194
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            193
+          ]
+        }
+      ],
+      "title": "Uncond",
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        ""
+      ],
+      "widgets_values_named": {
+        "text": ""
+      }
+    }
+  ],
+  "links": [
+    [
+      5,
+      8,
+      0,
+      5,
+      4,
+      "SIGMAS"
+    ],
+    [
+      16,
+      3,
+      0,
+      17,
+      1,
+      "VAE"
+    ],
+    [
+      24,
+      20,
+      0,
+      5,
+      5,
+      "LATENT"
+    ],
+    [
+      40,
+      2,
+      0,
+      28,
+      1,
+      "CLIP"
+    ],
+    [
+      99,
+      17,
+      0,
+      18,
+      0,
+      "IMAGE"
+    ],
+    [
+      112,
+      5,
+      0,
+      17,
+      0,
+      "LATENT"
+    ],
+    [
+      177,
+      81,
+      0,
+      5,
+      3,
+      "SAMPLER"
+    ],
+    [
+      187,
+      1,
+      0,
+      21,
+      0,
+      "MODEL"
+    ],
+    [
+      188,
+      21,
+      0,
+      57,
+      0,
+      "MODEL"
+    ],
+    [
+      189,
+      57,
+      0,
+      28,
+      0,
+      "MODEL"
+    ],
+    [
+      190,
+      28,
+      0,
+      8,
+      0,
+      "MODEL"
+    ],
+    [
+      191,
+      28,
+      0,
+      5,
+      0,
+      "MODEL"
+    ],
+    [
+      192,
+      82,
+      0,
+      5,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      193,
+      83,
+      0,
+      5,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      194,
+      28,
+      1,
+      83,
+      0,
+      "CLIP"
+    ],
+    [
+      195,
+      28,
+      1,
+      82,
+      0,
+      "CLIP"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 1.3513057093104155,
+      "offset": [
+        -118.23006496936551,
+        151.46588915882194
+      ]
+    },
+    "frontendVersion": "1.55.17"
+  },
+  "version": 0.4
+}

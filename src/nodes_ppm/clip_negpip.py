@@ -4,15 +4,13 @@
 from functools import partial
 from typing import Any
 
-from comfy.ldm.flux.model import Flux as FluxDIT
-from comfy.model_base import SDXL, Anima, BaseModel, Flux, MOSSImage, SDXLRefiner
+from comfy.model_base import SDXL, Anima, BaseModel, MOSSImage, SDXLRefiner
 from comfy.model_patcher import ModelPatcher
 from comfy.sd import CLIP
 from comfy_api.latest import io
 
 from ..compat.advanced_encode import patch_adv_encode
 from ..negpip.anima_negpip import patch_anima_negpip
-from ..negpip.flux_negpip import flux_forward_orig_negpip
 from ..negpip.moss_negpip import patch_moss_negpip
 from ..negpip.unet_negpip import encode_token_weights_negpip, sdxl_attn2_negpip
 
@@ -37,6 +35,7 @@ class CLIPNegPip(io.ComfyNode):
         return io.Schema(
             node_id="CLIPNegPip",
             display_name="CLIP NegPip",
+            search_aliases=["negative", "weight", "negpip", "clipnegpip"],
             category="conditioning",
             inputs=[
                 io.Model.Input("model"),
@@ -74,7 +73,6 @@ class CLIPNegPip(io.ComfyNode):
     @staticmethod
     def patch_negpip(m: ModelPatcher, c: CLIP, encoders: list[str]):
         model_type = type(m.model)
-        diffusion_model = m.get_model_object("diffusion_model")
 
         # SD1.* and SDXL
         if issubclass(model_type, SDXL) or issubclass(model_type, SDXLRefiner) or model_type == BaseModel:
@@ -84,17 +82,6 @@ class CLIPNegPip(io.ComfyNode):
                     partial(encode_token_weights_negpip, getattr(c.patcher.model, encoder)),
                 )
             m.set_model_attn2_patch(sdxl_attn2_negpip)
-            return True
-
-        # Flux (probably broken)
-        if issubclass(model_type, Flux):
-            flux_model: FluxDIT = diffusion_model  # type: ignore
-            for encoder in encoders:
-                c.patcher.add_object_patch(
-                    f"{encoder}.encode_token_weights",
-                    partial(encode_token_weights_negpip, getattr(c.patcher.model, encoder)),
-                )
-            m.add_object_patch("diffusion_model.forward_orig", partial(flux_forward_orig_negpip, flux_model))
             return True
 
         # Anima

@@ -1,0 +1,1091 @@
+{
+  "id": "fbf68094-bf31-4c31-8deb-645c2fb20f54",
+  "revision": 0,
+  "last_node_id": 87,
+  "last_link_id": 204,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "UNETLoader",
+      "pos": [
+        200,
+        30
+      ],
+      "size": [
+        270,
+        110
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            187
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "UNETLoader"
+      },
+      "widgets_values": [
+        "moss/moss_image_sft_int8_convrot_split_qkv.safetensors",
+        "default",
+        "default"
+      ],
+      "widgets_values_named": {
+        "unet_name": "moss/moss_image_sft_int8_convrot_split_qkv.safetensors",
+        "weight_dtype": "default",
+        "device": "default"
+      }
+    },
+    {
+      "id": 2,
+      "type": "CLIPLoader",
+      "pos": [
+        200,
+        480
+      ],
+      "size": [
+        270,
+        110
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            40
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPLoader"
+      },
+      "widgets_values": [
+        "qwen/qwen3.5_9b_bf16.safetensors",
+        "moss_image",
+        "default"
+      ],
+      "widgets_values_named": {
+        "clip_name": "qwen/qwen3.5_9b_bf16.safetensors",
+        "type": "moss_image",
+        "device": "default"
+      }
+    },
+    {
+      "id": 3,
+      "type": "VAELoader",
+      "pos": [
+        200,
+        630
+      ],
+      "size": [
+        270,
+        90
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            16
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAELoader"
+      },
+      "widgets_values": [
+        "dit/flux2-vae_small.safetensors",
+        "default"
+      ],
+      "widgets_values_named": {
+        "vae_name": "dit/flux2-vae_small.safetensors",
+        "device": "default"
+      }
+    },
+    {
+      "id": 5,
+      "type": "SamplerCustom",
+      "pos": [
+        1120,
+        280
+      ],
+      "size": [
+        280,
+        460
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 191
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 192
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 193
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "link": 177
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 5
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 24
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "LATENT",
+          "links": [
+            112
+          ]
+        },
+        {
+          "name": "denoised_output",
+          "type": "LATENT",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SamplerCustom"
+      },
+      "widgets_values": [
+        true,
+        3,
+        "fixed",
+        5
+      ],
+      "widgets_values_named": {
+        "add_noise": true,
+        "noise_seed": 3,
+        "control_after_generate": "fixed",
+        "cfg": 5
+      }
+    },
+    {
+      "id": 8,
+      "type": "BasicScheduler",
+      "pos": [
+        1120,
+        130
+      ],
+      "size": [
+        280,
+        110
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 190
+        }
+      ],
+      "outputs": [
+        {
+          "name": "SIGMAS",
+          "type": "SIGMAS",
+          "links": [
+            5
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "BasicScheduler"
+      },
+      "widgets_values": [
+        "sgm_uniform",
+        50,
+        1
+      ],
+      "widgets_values_named": {
+        "scheduler": "sgm_uniform",
+        "steps": 50,
+        "denoise": 1
+      }
+    },
+    {
+      "id": 17,
+      "type": "VAEDecode",
+      "pos": [
+        1430,
+        30
+      ],
+      "size": [
+        140,
+        50
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 112
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 16
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            99
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAEDecode"
+      }
+    },
+    {
+      "id": 18,
+      "type": "PreviewImage",
+      "pos": [
+        1430,
+        120
+      ],
+      "size": [
+        570,
+        620
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 99
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreviewImage"
+      },
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 20,
+      "type": "EmptyLatentImageAR",
+      "pos": [
+        480,
+        120
+      ],
+      "size": [
+        270,
+        130
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            24,
+            196
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "EmptyLatentImageAR"
+      },
+      "widgets_values": [
+        1024,
+        1.778,
+        8,
+        1
+      ],
+      "widgets_values_named": {
+        "resolution": 1024,
+        "ratio": 1.778,
+        "step": 8,
+        "batch_size": 1
+      }
+    },
+    {
+      "id": 21,
+      "type": "ModelSamplingAuraFlow",
+      "pos": [
+        200,
+        180
+      ],
+      "size": [
+        270,
+        90
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 187
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            188
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ModelSamplingAuraFlow"
+      },
+      "widgets_values": [
+        5,
+        "flow"
+      ],
+      "widgets_values_named": {
+        "shift": 5,
+        "sampling": "flow"
+      }
+    },
+    {
+      "id": 28,
+      "type": "CLIPNegPip",
+      "pos": [
+        480,
+        30
+      ],
+      "size": [
+        150,
+        50
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 189
+        },
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 40
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            190,
+            191
+          ]
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            194,
+            195
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPNegPip"
+      }
+    },
+    {
+      "id": 57,
+      "type": "SkipLayerGuidanceDiTSimple",
+      "pos": [
+        200,
+        310
+      ],
+      "size": [
+        270,
+        130
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 188
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            189
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SkipLayerGuidanceDiTSimple"
+      },
+      "widgets_values": [
+        "",
+        "22",
+        0,
+        1
+      ],
+      "widgets_values_named": {
+        "double_layers": "",
+        "single_layers": "22",
+        "start_percent": 0,
+        "end_percent": 1
+      }
+    },
+    {
+      "id": 81,
+      "type": "KSamplerSelect",
+      "pos": [
+        1120,
+        30
+      ],
+      "size": [
+        280,
+        60
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "SAMPLER",
+          "type": "SAMPLER",
+          "links": [
+            177
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "KSamplerSelect"
+      },
+      "widgets_values": [
+        "euler"
+      ],
+      "widgets_values_named": {
+        "sampler_name": "euler"
+      }
+    },
+    {
+      "id": 82,
+      "type": "CLIPTextEncode",
+      "pos": [
+        1010,
+        50
+      ],
+      "size": [
+        210,
+        90
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 195
+        },
+        {
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": 203
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            192
+          ]
+        }
+      ],
+      "title": "Cond",
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        ""
+      ],
+      "widgets_values_named": {
+        "text": ""
+      }
+    },
+    {
+      "id": 83,
+      "type": "CLIPTextEncode",
+      "pos": [
+        1000,
+        90
+      ],
+      "size": [
+        210,
+        90
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 194
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            193
+          ]
+        }
+      ],
+      "title": "Uncond",
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        ""
+      ],
+      "widgets_values_named": {
+        "text": ""
+      }
+    },
+    {
+      "id": 85,
+      "type": "CreateBoundingBoxesPPM",
+      "pos": [
+        760,
+        370
+      ],
+      "size": [
+        340,
+        440
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "background",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "bboxes",
+          "shape": 7,
+          "type": "BOUNDING_BOX,ARRAY,STRING",
+          "link": null
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          },
+          "link": 201
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          },
+          "link": 202
+        }
+      ],
+      "outputs": [
+        {
+          "name": "preview",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "name": "bboxes",
+          "type": "BOUNDING_BOX",
+          "links": null
+        },
+        {
+          "name": "elements",
+          "type": "ARRAY",
+          "links": [
+            199
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CreateBoundingBoxesPPM"
+      },
+      "widgets_values": [
+        1368,
+        768,
+        [
+          {
+            "x": 192,
+            "y": 32,
+            "width": 448,
+            "height": 736,
+            "metadata": {
+              "type": "obj",
+              "text": "",
+              "desc": "Makise Kurisu from Steins;Gate.\nShe is happily hugging Madoka",
+              "palette": [
+                "#561F1F"
+              ]
+            }
+          },
+          {
+            "x": 512,
+            "y": 192,
+            "width": 352,
+            "height": 576,
+            "metadata": {
+              "type": "obj",
+              "text": "",
+              "desc": "Madoka Kaname from Mahou Shoujo Madoka Magica. She is both happy and slighly embarassed from the hug.",
+              "palette": [
+                "#FAD9F8"
+              ]
+            }
+          },
+          {
+            "x": 992,
+            "y": 160,
+            "width": 320,
+            "height": 608,
+            "metadata": {
+              "type": "obj",
+              "text": "",
+              "desc": "Akemi Homura from Mahou Shoujo Madoka Magica. Annoyed and slightly angry expression with a 💢 symbol.",
+              "palette": [
+                "#422250"
+              ]
+            }
+          }
+        ],
+        []
+      ],
+      "widgets_values_named": {
+        "width": 1368,
+        "height": 768,
+        "editor_state": [
+          {
+            "x": 192,
+            "y": 32,
+            "width": 448,
+            "height": 736,
+            "metadata": {
+              "type": "obj",
+              "text": "",
+              "desc": "Makise Kurisu from Steins;Gate.\nShe is happily hugging Madoka",
+              "palette": [
+                "#561F1F"
+              ]
+            }
+          },
+          {
+            "x": 512,
+            "y": 192,
+            "width": 352,
+            "height": 576,
+            "metadata": {
+              "type": "obj",
+              "text": "",
+              "desc": "Madoka Kaname from Mahou Shoujo Madoka Magica. She is both happy and slighly embarassed from the hug.",
+              "palette": [
+                "#FAD9F8"
+              ]
+            }
+          },
+          {
+            "x": 992,
+            "y": 160,
+            "width": 320,
+            "height": 608,
+            "metadata": {
+              "type": "obj",
+              "text": "",
+              "desc": "Akemi Homura from Mahou Shoujo Madoka Magica. Annoyed and slightly angry expression with a 💢 symbol.",
+              "palette": [
+                "#422250"
+              ]
+            }
+          }
+        ],
+        "last_incoming": []
+      }
+    },
+    {
+      "id": 86,
+      "type": "LatentToWidthHeight",
+      "pos": [
+        540,
+        290
+      ],
+      "size": [
+        210,
+        50
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "link": 196
+        }
+      ],
+      "outputs": [
+        {
+          "name": "width",
+          "type": "INT",
+          "links": [
+            200,
+            201
+          ]
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "links": [
+            202,
+            204
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LatentToWidthHeight"
+      }
+    },
+    {
+      "id": 87,
+      "type": "MOSSImageLayoutPrompt",
+      "pos": [
+        760,
+        130
+      ],
+      "size": [
+        340,
+        200
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "element",
+          "type": "ARRAY",
+          "link": 199
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          },
+          "link": 200
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          },
+          "link": 204
+        }
+      ],
+      "outputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "links": [
+            203
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MOSSImageLayoutPrompt"
+      },
+      "widgets_values": [
+        "Anime screenshot with a (simple background:-2) and (bokeh:-2).",
+        1024,
+        1024,
+        "1, 2, 3"
+      ],
+      "widgets_values_named": {
+        "prompt": "Anime screenshot with a (simple background:-2) and (bokeh:-2).",
+        "width": 1024,
+        "height": 1024,
+        "character_boxes": "1, 2, 3"
+      }
+    }
+  ],
+  "links": [
+    [
+      5,
+      8,
+      0,
+      5,
+      4,
+      "SIGMAS"
+    ],
+    [
+      16,
+      3,
+      0,
+      17,
+      1,
+      "VAE"
+    ],
+    [
+      24,
+      20,
+      0,
+      5,
+      5,
+      "LATENT"
+    ],
+    [
+      40,
+      2,
+      0,
+      28,
+      1,
+      "CLIP"
+    ],
+    [
+      99,
+      17,
+      0,
+      18,
+      0,
+      "IMAGE"
+    ],
+    [
+      112,
+      5,
+      0,
+      17,
+      0,
+      "LATENT"
+    ],
+    [
+      177,
+      81,
+      0,
+      5,
+      3,
+      "SAMPLER"
+    ],
+    [
+      187,
+      1,
+      0,
+      21,
+      0,
+      "MODEL"
+    ],
+    [
+      188,
+      21,
+      0,
+      57,
+      0,
+      "MODEL"
+    ],
+    [
+      189,
+      57,
+      0,
+      28,
+      0,
+      "MODEL"
+    ],
+    [
+      190,
+      28,
+      0,
+      8,
+      0,
+      "MODEL"
+    ],
+    [
+      191,
+      28,
+      0,
+      5,
+      0,
+      "MODEL"
+    ],
+    [
+      192,
+      82,
+      0,
+      5,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      193,
+      83,
+      0,
+      5,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      194,
+      28,
+      1,
+      83,
+      0,
+      "CLIP"
+    ],
+    [
+      195,
+      28,
+      1,
+      82,
+      0,
+      "CLIP"
+    ],
+    [
+      196,
+      20,
+      0,
+      86,
+      0,
+      "LATENT"
+    ],
+    [
+      199,
+      85,
+      2,
+      87,
+      0,
+      "ARRAY"
+    ],
+    [
+      200,
+      86,
+      0,
+      87,
+      1,
+      "INT"
+    ],
+    [
+      201,
+      86,
+      0,
+      85,
+      2,
+      "INT"
+    ],
+    [
+      202,
+      86,
+      1,
+      85,
+      3,
+      "INT"
+    ],
+    [
+      203,
+      87,
+      0,
+      82,
+      1,
+      "STRING"
+    ],
+    [
+      204,
+      86,
+      1,
+      87,
+      2,
+      "INT"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 1.6350799082656116,
+      "offset": [
+        -513.4918987841919,
+        3.5882172619280674
+      ]
+    },
+    "frontendVersion": "1.55.17"
+  },
+  "version": 0.4
+}

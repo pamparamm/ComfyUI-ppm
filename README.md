@@ -2,48 +2,60 @@
 
 Just a bunch of some random nodes modified/fixed/created by me and/or others. If any node starts throwing errors after an update - try to delete and re-add the node.
 
-You can browse example workflows for FLUX and SDXL NoobAI inside ComfyUI's "Browse Templates/Custom Nodes/ComfyUi-ppm" menu. I'll probably add some more examples in future (but I'm kinda lazy, kek).
+You can browse example workflows for MOSS Image and SDXL NoobAI inside ComfyUI's "Browse Templates/Custom Nodes/ComfyUi-ppm" menu. I'll probably add some more examples in future (but I'm kinda lazy, kek).
 
 ## Nodes
 
-### CLIPNegPip
+### CLIP NegPip
 
 > [!TIP]
 >
-> See "attention_couple+negpip" or "flux_negpip" from ComfyUI's "Browse Templates" menu.
+> See "moss+negpip" or "attention_couple+negpip" from ComfyUI's "Browse Templates" menu.
 
-Allows you to use negative weights in prompts. Negative weights can be used in both CFG models (such as SDXL) and Guidance-Distilled models (such as Flux) to negate a concept or a trait.
+Allows you to use negative weights in prompts. Negative weights can be used in both CFG models (such as SDXL) and Guidance-Distilled models (such as the turbo versions of Anima and MOSS Image) to negate a concept or a trait.
+
+#### Examples
+
+`moss+negpip` - MOSS Image with `Mario wearing a (red:-1) cap. Scene: (simple background:-1), (blurry:-1), castle.` - the cap comes out green and the background stays a detailed castle instead of a plain blurred one:
+
+<img src="example_workflows/moss+negpip.jpg" alt="MOSS Image with negative weights" width="360">
+
+Three characters placed with `Create Bounding Boxes (PPM)` + `MOSS-Image Layout Prompt` (`moss+regions` / `moss+regions+negpip`) - adding `(pink:-2)` to the middle region and `(lavender:-2)` to the right one strips those tints from the outfits:
+
+| `moss+regions` | `moss+regions+negpip` |
+| --- | --- |
+| <img src="example_workflows/moss+regions.jpg" alt="MOSS Image with region prompts" width="420"> | <img src="example_workflows/moss+regions+negpip.jpg" alt="MOSS Image with weighted region prompts" width="420"> |
 
 Supports:
 
 - SD1
 - SDXL
 - Anima
-- MOSS-Image
-- ~~FLUX~~ Unmaintained
+- MOSS Image - also enables regular prompt weighting like `(word:2)`
+
+#### Description
 
 Modified implementation of NegPiP by [laksjdjf](https://github.com/laksjdjf) and [hako-mikan](https://github.com/hako-mikan). It uses ModelPatcher instead of monkey-patching, which should increase compatibility with other nodes.
 
-MOSS-Image drops token weights in the qwen35 chat template, so `CLIPNegPip` re-enables the syntax and applies the weights inside attention instead of on the text embeddings: `(word:2)` biases that token's keys by `3 * log(w)`, `(word:-2)` leaves attention alone and scales the token's value by `-2`, `(word:0)` mutes it. Only the image tokens read the weighted stream, so the prompt tokens stay unweighted. Prompts without weights cost nothing.
+MOSS Image ignores token weights in vanilla ComfyUI, so `CLIP NegPip` re-enables the syntax and applies the weights inside attention instead of on the text embeddings: `(word:2)` biases that token's keys by `3 * log(w)`, `(word:-2)` leaves attention alone and scales the token's value by `-2`, `(word:0)` mutes it. Only the image tokens read the weighted stream, so the prompt tokens stay unweighted. Prompts without weights cost nothing.
 
 You can read more about NegPiP [in the original repo](https://github.com/hako-mikan/sd-webui-negpip). ~~When used together with tag-based models, you should keep all commas inside weight braces (i.e. `(worst quality,:-1.3) (sketch,:-1.1)` instead of `(worst quality:-1.3), (sketch:-1.1),`).~~ Some tag-based models (Illustrious/NoobAI) perform better with commas in braces, while other models (like Anima) perform better with commas outside of emphasis blocks - feel free to experiment.
 
 > [!NOTE]
-> `CLIPNegPip` is compatible with:
+> `CLIP NegPip` is compatible with:
 >
 > - [ComfyUI prompt control by asagi4](https://github.com/asagi4/comfyui-prompt-control/)
 > - [Advanced CLIP Text Encode extension by BlenderNeko](https://github.com/BlenderNeko/ComfyUI_ADV_CLIP_emb)
 >
-> `CLIPNegPip` is **incompatible** with:
+> `CLIP NegPip` is **incompatible** with:
 >
 > - [smZ Nodes by shiimizu](https://github.com/shiimizu/ComfyUI_smZNodes) (ComfyUI prompt control can replace most of its functionality)
-> - [Comfyui_Flux_Style_Adjust by yichengup](https://github.com/yichengup/Comfyui_Flux_Style_Adjust) (and probably some other custom nodes that modify cond tensors)
 
 ### AttentionCouplePPM
 
 > [!TIP]
 >
-> Connect this node after other model patches (such as `CLIPNegPip`, `EasyCache`, `LazyCache`, etc.).
+> Connect this node after other model patches (such as `CLIP NegPip`, `EasyCache`, `LazyCache`, etc.).
 >
 > See "attention_couple+negpip" and "attention_couple_with_global_prompt" from ComfyUI's "Browse Templates" menu.
 
@@ -63,6 +75,18 @@ Inputs for new regions are managed automatically: when you attach cond/mask of a
 You can use multiple `LatentToMaskBB` nodes to set bounding boxes for `AttentionCouplePPM`. The parameters are relative to your initial latent: `x=0.5, y=0.0, w=0.5, h=1.0` will produce a mask covering the right half of the image.
 
 You can adjust mask values to set region strength and use `ConditioningSetAreaStrength` to increase/decrease conditioning strength.
+
+### Create Bounding Boxes (PPM)
+
+Vibecoded port of ComfyUI's `Create Bounding Boxes` node with a box editor that also works with **Nodes 2.0 disabled**.
+
+<img src="docs/bboxes.png" alt="Create Bounding Boxes (PPM)" width="800">
+
+The stock box editor is a Vue-only widget: with Nodes 2.0 turned off, the classic canvas shows just a placeholder and the boxes cannot be edited. This node keeps the same inputs and outputs (`preview`, `bboxes`, `elements`) and adds a DOM widget editor for the classic canvas: draw/move/resize boxes with grid snapping, per-box type (object/text), text, description and color palette. With Nodes 2.0 enabled the stock Vue editor is used and the DOM editor stays hidden.
+
+- When `background` is connected, the canvas background and `width`/`height` are taken from the image after the node has run once.
+- `width`/`height` accept links (e.g. `Empty Latent Image (Aspect Ratio)` → `Latent to Width & Height`). After a run the canvas adopts the size the node actually executed with and existing boxes are reinterpreted in that frame.
+- A new value on the `bboxes` input re-initializes the canvas; canvas edits are kept until the upstream value changes again.
 
 ### Attention Selectors
 
@@ -131,16 +155,6 @@ A small lightweight wrapper over `ConditioningConcat` node. It splits prompts in
 ### CLIPTokenCounter
 
 Counts tokens in your prompt and returns them as a string. You can use `Preview Any` node to display them.
-
-### Create Bounding Boxes (PPM)
-
-Port of ComfyUI's `Create Bounding Boxes` node with a box editor that also works with **Nodes 2.0 disabled**.
-
-The stock box editor is a Vue-only widget: with Nodes 2.0 turned off, the classic canvas shows just a placeholder and the boxes cannot be edited. This node keeps the same inputs and outputs (`preview`, `bboxes`, `elements`) and adds a DOM widget editor for the classic canvas: draw/move/resize boxes with grid snapping, per-box type (object/text), text, description and color palette. With Nodes 2.0 enabled the stock Vue editor is used and the DOM editor stays hidden.
-
-- When `background` is connected, the canvas background and `width`/`height` are taken from the image after the node has run once.
-- `width`/`height` accept links (e.g. `Empty Latent Image (Aspect Ratio)` → `Latent to Width & Height`). After a run the canvas adopts the size the node actually executed with and existing boxes are reinterpreted in that frame.
-- A new value on the `bboxes` input re-initializes the canvas; canvas edits are kept until the upstream value changes again.
 
 ## Hooks/Hijacks
 
