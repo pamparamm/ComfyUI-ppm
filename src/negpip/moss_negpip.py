@@ -1,4 +1,6 @@
 import copy
+import logging
+import math
 from typing import Callable
 
 import torch
@@ -15,8 +17,6 @@ COND_NEGPIP_BIAS_KEY = "c_ppm_negpip_attn_bias"
 COND_NEGPIP_V_SCALE_KEY = "c_ppm_negpip_v_scale"
 NEGPIP_WEIGHTING_KEY = "ppm_negpip_weighting"
 
-WEIGHT_GAIN = 3.0
-
 
 def patch_moss_negpip(patcher: ModelPatcher, clip: CLIP, encoder: str):
     clip.tokenizer = moss_tokenizer_negpip(clip.tokenizer, encoder)
@@ -30,12 +30,10 @@ def patch_moss_negpip(patcher: ModelPatcher, clip: CLIP, encoder: str):
         "extra_conds",
         moss_extra_conds_negpip_wrapper(previous_extra_conds),
     )
-    diffusion_model: MOSSImageDIT = patcher.get_model_object("diffusion_model")  # type: ignore
-    attention = diffusion_model.layers[0].comfy_attention.function
     patcher.add_wrapper_with_key(
         comfy.patcher_extension.WrappersMP.DIFFUSION_MODEL,
         WRAPPER_KEY,
-        moss_diffusion_negpip_wrapper(attention),
+        moss_diffusion_negpip_wrapper(patcher),
     )
 
 
@@ -78,18 +76,24 @@ def moss_extra_conds_negpip_wrapper(previous_extra_conds: Callable[..., dict]):
             pad = weights.new_ones(*weights.shape[:-1], n_text - weights.shape[-1])
             weights = torch.cat((weights, pad), dim=-1)
         elif weights is not None and weights.shape[-1] > n_text:
+            logging.warning(
+                "NegPiP: {} prompt weights do not fit {} text tokens, ignoring weights.".format(
+                    weights.shape[-1], n_text
+                )
+            )
             weights = None
 
         out = previous_extra_conds(**kwargs)
 
         if weights is not None and not torch.all(weights == 1.0):
             neg = weights < 0
-            bias = weights.clamp_min(1e-4).log() * WEIGHT_GAIN
-            bias[neg] = 0.0
+            bias = weights.abs().clamp_min(1e-4).log()
+            bias = bias - (bias.logsumexp(-1, keepdim=True) - math.log(bias.shape[-1]))
             if torch.any(bias):
                 out[COND_NEGPIP_BIAS_KEY] = comfy.conds.CONDRegular(bias.unsqueeze(1).unsqueeze(1))
             if torch.any(neg):
-                v_scale = torch.where(neg, weights, torch.ones_like(weights))
+                v_scale = torch.ones_like(weights)
+                v_scale[neg] = -1.0
                 out[COND_NEGPIP_V_SCALE_KEY] = comfy.conds.CONDRegular(v_scale.unsqueeze(-1))
 
         return out
@@ -97,7 +101,7 @@ def moss_extra_conds_negpip_wrapper(previous_extra_conds: Callable[..., dict]):
     return _moss_extra_conds_negpip_wrapper
 
 
-def moss_diffusion_negpip_wrapper(attention: Callable | None):
+def moss_diffusion_negpip_wrapper(patcher: ModelPatcher):
     def _moss_diffusion_negpip_wrapper(executor, latent, timestep, context, transformer_options, **kwargs):
         bias: torch.Tensor | None = kwargs.get(COND_NEGPIP_BIAS_KEY)
         v_scale: torch.Tensor | None = kwargs.get(COND_NEGPIP_V_SCALE_KEY)
@@ -108,12 +112,14 @@ def moss_diffusion_negpip_wrapper(attention: Callable | None):
         if bias is not None:
             bias = torch.cat((bias.new_zeros(*bias.shape[:3], n_img), bias), dim=-1)
 
+        diffusion_model: MOSSImageDIT = patcher.get_model_object("diffusion_model")  # type: ignore
+        attentions = [block.comfy_attention.function for block in diffusion_model.layers]  # pyrefly: ignore[missing-attribute]
         transformer_options[NEGPIP_WEIGHTING_KEY] = {
             "n_img": n_img,
             "n_text": context.shape[1],
             "bias": bias,
             "v_scale": v_scale,
-            "attention": attention,
+            "attentions": attentions,
             "previous": transformer_options.get("optimized_attention_override"),
         }
         transformer_options["optimized_attention_override"] = moss_attention_negpip
@@ -131,9 +137,13 @@ def moss_attention_negpip(
     heads: int,
     **kwargs,
 ) -> torch.Tensor:
-    weighting = kwargs["transformer_options"][NEGPIP_WEIGHTING_KEY]
+    transformer_options = kwargs["transformer_options"]
+    weighting = transformer_options[NEGPIP_WEIGHTING_KEY]
     n_img, n_text = weighting["n_img"], weighting["n_text"]
-    attention = weighting["attention"] or default_attention
+    attentions = weighting["attentions"]
+    block_index = transformer_options.get("block_index", 0)
+    attention = attentions[block_index] if 0 <= block_index < len(attentions) else attentions[0]
+    attention = attention or default_attention
     previous = weighting["previous"]
 
     def call(q_part: torch.Tensor, v_part: torch.Tensor, mask: torch.Tensor | None) -> torch.Tensor:

@@ -37,7 +37,7 @@ Supports:
 
 Modified implementation of NegPiP by [laksjdjf](https://github.com/laksjdjf) and [hako-mikan](https://github.com/hako-mikan). It uses ModelPatcher instead of monkey-patching, which should increase compatibility with other nodes.
 
-MOSS Image ignores token weights in vanilla ComfyUI, so `CLIP NegPip` re-enables the syntax and applies the weights inside attention instead of on the text embeddings: `(word:2)` biases that token's keys by `3 * log(w)`, `(word:-2)` leaves attention alone and scales the token's value by `-2`, `(word:0)` mutes it. Only the image tokens read the weighted stream, so the prompt tokens stay unweighted. Prompts without weights cost nothing.
+MOSS Image ignores token weights in vanilla ComfyUI, so `CLIP NegPip` re-enables the syntax and applies the weights inside attention instead of on the text embeddings.
 
 You can read more about NegPiP [in the original repo](https://github.com/hako-mikan/sd-webui-negpip). ~~When used together with tag-based models, you should keep all commas inside weight braces (i.e. `(worst quality,:-1.3) (sketch,:-1.1)` instead of `(worst quality:-1.3), (sketch:-1.1),`).~~ Some tag-based models (Illustrious/NoobAI) perform better with commas in braces, while other models (like Anima) perform better with commas outside of emphasis blocks - feel free to experiment.
 
