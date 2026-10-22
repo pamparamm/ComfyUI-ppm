@@ -151,10 +151,17 @@ def moss_attention_negpip(
             return previous(default_attention, q_part, k, v_part, heads, mask=mask, **kwargs)
         return attention(q_part, k, v_part, heads, mask=mask, **kwargs)
 
-    if k.shape[1] != n_img + n_text:
+    n_ref = k.shape[1] - n_img - n_text
+    if n_ref < 0:
         return call(q, v, None)
 
-    v_scale = weighting["v_scale"]
-    v_weighted = v if v_scale is None else torch.cat((v[:, :-n_text], v[:, -n_text:] * v_scale), dim=1)
+    bias = weighting["bias"]
+    if bias is not None and n_ref > 0:
+        bias = torch.cat((bias, bias.new_zeros(*bias.shape[:3], n_ref)), dim=-1)
 
-    return torch.cat((call(q[:, :n_img], v_weighted, weighting["bias"]), call(q[:, n_img:], v, None)), dim=1)
+    v_scale = weighting["v_scale"]
+    v_weighted = v
+    if v_scale is not None:
+        v_weighted = torch.cat((v[:, :n_img], v[:, n_img : n_img + n_text] * v_scale, v[:, n_img + n_text :]), dim=1)
+
+    return torch.cat((call(q[:, :n_img], v_weighted, bias), call(q[:, n_img:], v, None)), dim=1)
