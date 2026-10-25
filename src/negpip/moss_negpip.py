@@ -30,7 +30,7 @@ def patch_moss_negpip(patcher: ModelPatcher, clip: CLIP, encoder: str):
     clip.tokenizer = moss_tokenizer_negpip(clip.tokenizer, encoder)
     clip.patcher.add_object_patch(
         f"{encoder}.encode_token_weights",
-        moss_encode_token_weights_negpip_wrapper(getattr(clip.patcher.model, encoder).encode_token_weights),
+        moss_encode_token_weights_negpip_wrapper(clip.patcher.get_model_object(f"{encoder}.encode_token_weights")),
     )
 
     previous_extra_conds = patcher.get_model_object("extra_conds")

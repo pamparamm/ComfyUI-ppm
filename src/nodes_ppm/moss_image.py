@@ -1,8 +1,6 @@
-from typing import Any
-import copy
 import logging
 import math
-from typing import Callable
+from typing import Any, Callable
 
 import torch
 
@@ -24,19 +22,23 @@ def downscale(image: torch.Tensor) -> torch.Tensor:
     ).movedim(1, -1)
 
 
-def images_tokenizer(tokenizer, images: list[torch.Tensor]):
-    tok = copy.copy(tokenizer)
-    tokenize = tokenizer.tokenize_with_weights
+class ImagesTokenizer(MOSSImageTokenizer):
+    ppm_blocks: str
+    ppm_images: list[torch.Tensor]
+
+    def tokenize_with_weights(self, text: str, return_word_ids: bool = False, **kwargs):  # pyrefly: ignore[bad-override]
+        if not kwargs.get("images") and kwargs.get("image") is None:
+            kwargs["images"] = self.ppm_images
+            text = self.ppm_blocks + text
+        return super().tokenize_with_weights(text, return_word_ids=return_word_ids, **kwargs)
+
+
+def images_tokenizer(tokenizer: MOSSImageTokenizer, images: list[torch.Tensor]) -> ImagesTokenizer:
     blocks = "".join(
         "Picture {}: <|vision_start|><|image_pad|><|vision_end|>".format(i + 1) for i in range(len(images))
     )
-
-    def tokenize_with_weights(text: str, return_word_ids: bool = False, **kwargs):
-        if kwargs.get("images") or kwargs.get("image") is not None:
-            return tokenize(text, return_word_ids=return_word_ids, **kwargs)
-        return tokenize(blocks + text, return_word_ids=return_word_ids, images=images, **kwargs)
-
-    tok.tokenize_with_weights = tokenize_with_weights
+    tok = ImagesTokenizer.__new__(ImagesTokenizer)
+    tok.__dict__ = {**tokenizer.__dict__, "ppm_blocks": blocks, "ppm_images": images}
     return tok
 
 
@@ -68,7 +70,9 @@ def patch_clip(clip: CLIP, images: list[torch.Tensor] | None, weight: float, ref
         clip.tokenizer = images_tokenizer(clip.tokenizer, images)
     clip.patcher.add_object_patch(
         f"{encoder}.encode_token_weights",
-        images_encode_token_weights(getattr(clip.patcher.model, encoder).encode_token_weights, weight, refs, method),
+        images_encode_token_weights(
+            clip.patcher.get_model_object(f"{encoder}.encode_token_weights"), weight, refs, method
+        ),
     )
 
 
