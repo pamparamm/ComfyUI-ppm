@@ -7,6 +7,7 @@ import torch
 
 import comfy.conds
 import comfy.patcher_extension
+import comfy.text_encoders.qwen_vl
 from comfy.ldm.moss_image.model import MOSSImage as MOSSImageDIT
 from comfy.model_patcher import ModelPatcher
 from comfy.sd import CLIP
@@ -16,6 +17,13 @@ TOKEN_WEIGHTS_KEY = "ppm_negpip_text_weights"
 COND_NEGPIP_BIAS_KEY = "c_ppm_negpip_attn_bias"
 COND_NEGPIP_V_SCALE_KEY = "c_ppm_negpip_v_scale"
 NEGPIP_WEIGHTING_KEY = "ppm_negpip_weighting"
+
+
+def entry_rows(token) -> int:
+    if not isinstance(token, dict):
+        return 1
+    _, grid = comfy.text_encoders.qwen_vl.process_qwen2vl_images(token["data"], patch_size=16)  # 2x2 patches merge
+    return int(grid[0, 1] * grid[0, 2]) // 4
 
 
 def patch_moss_negpip(patcher: ModelPatcher, clip: CLIP, encoder: str):
@@ -53,7 +61,7 @@ def moss_tokenizer_negpip(tokenizer, encoder: str):
 
 def moss_encode_token_weights_negpip_wrapper(previous_encode_token_weights: Callable):
     def _moss_encode_token_weights_negpip_wrapper(token_weight_pairs):
-        weights = [w for section in token_weight_pairs for _, w, *_ in section]
+        weights = [w for section in token_weight_pairs for token, w, *_ in section for _ in range(entry_rows(token))]
         unweighted = [[(t, 1.0, *rest) for t, _, *rest in section] for section in token_weight_pairs]
 
         out = previous_encode_token_weights(unweighted)
@@ -135,6 +143,7 @@ def moss_attention_negpip(
     k: torch.Tensor,
     v: torch.Tensor,
     heads: int,
+    mask: torch.Tensor | None = None,
     **kwargs,
 ) -> torch.Tensor:
     transformer_options = kwargs["transformer_options"]
@@ -146,10 +155,14 @@ def moss_attention_negpip(
     attention = attention or default_attention
     previous = weighting["previous"]
 
-    def call(q_part: torch.Tensor, v_part: torch.Tensor, mask: torch.Tensor | None) -> torch.Tensor:
+    def call(q_part: torch.Tensor, v_part: torch.Tensor, bias: torch.Tensor | None) -> torch.Tensor:
+        if bias is None:
+            bias = mask
+        elif mask is not None and bias.shape[-1] == mask.shape[-1]:
+            bias = bias + mask
         if previous is not None:
-            return previous(default_attention, q_part, k, v_part, heads, mask=mask, **kwargs)
-        return attention(q_part, k, v_part, heads, mask=mask, **kwargs)
+            return previous(default_attention, q_part, k, v_part, heads, mask=bias, **kwargs)
+        return attention(q_part, k, v_part, heads, mask=bias, **kwargs)
 
     n_ref = k.shape[1] - n_img - n_text
     if n_ref < 0:

@@ -16,6 +16,7 @@ from .nodes_ppm import (
     latent_misc,
     latent_tonemap,
     misc,
+    moss_image,
     samplers,
     temperature_sampling,
 )
@@ -46,6 +47,7 @@ class PPMExtension(ComfyExtension):
             *v3_schema_stub(latent_misc),
             *v3_schema_stub(latent_tonemap),
             *misc.NODES,
+            *moss_image.NODES,
             *v3_schema_stub(samplers),
             *temperature_sampling.NODES,
         ]
