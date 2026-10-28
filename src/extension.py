@@ -4,6 +4,7 @@ from comfy_api.latest import ComfyExtension, io
 
 from .compat.utils import v3_schema_stub
 from .nodes_ppm import (
+    anima_ref,
     attention_couple_ppm,
     attention_selector,
     bounding_boxes_ppm,
@@ -35,6 +36,7 @@ class PPMExtension(ComfyExtension):
     async def get_node_list(self) -> list[type[io.ComfyNode]]:
         # TODO convert more nodes to v3
         return [
+            *anima_ref.NODES,
             *attention_couple_ppm.NODES,
             *attention_selector.NODES,
             *bounding_boxes_ppm.NODES,

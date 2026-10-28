@@ -89,6 +89,16 @@ The stock box editor is a Vue-only widget: with Nodes 2.0 turned off, the classi
 - A new value on the `bboxes` input re-initializes the canvas; canvas edits are kept until the upstream value changes again.
 - Clicking a box's number badge selects that box and raises it above the others, so a box can be picked out of a stack of overlapping ones.
 
+### Anima Ref Adapter (PPM) and Anima Ref Conditioning (PPM)
+
+Modified implementation of [ComfyUI-Anima-Ref-Adapter by ElectronGirl](https://github.com/ElectronGirl/ComfyUI-Anima-Ref-Adapter) that should be compatible with various model patches (i.e. CLIP NegPip) and guiders.
+
+Both `Anima Ref Adapter (PPM)` and `Anima Ref Conditioning (PPM)` nodes are required: the former is for tuning reference timesteps/strength and the latter is for padding and hooking reference image to positive/negative conds.
+
+Load adapter weights before `Anima Ref Adapter (PPM)` with any LoRA loader (i.e. stock `Load LoRA` node):
+- For [circlestone-labs/Anima](https://huggingface.co/circlestone-labs/Anima) model: use [ElectronGirl/anima-ref-adapter](https://huggingface.co/ElectronGirl/anima-ref-adapter) - official adapter weights.
+- For [Gazingstars123/Anima-2.9B](https://huggingface.co/Gazingstars123/Anima-2.9B) model: use [pamparamm/anima-ref-adapter-2.9B-converted](https://huggingface.co/pamparamm/anima-ref-adapter-2.9B-converted) - converted by me, or convert official weights for Anima yourself by using [Anima2.9B-Lora-weight-conversion script by storyAura](https://github.com/storyAura/Anima2.9B-Lora-weight-conversion).
+
 ### Attention Selectors
 
 `Model Attention Selector` and `CLIP Attention Selector` nodes, can be used to swap the optimized attention algorithm, such as pytorch (SDPA), sage (SageAttention), xformers, etc., without restarting ComfyUI.
