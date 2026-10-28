@@ -280,12 +280,28 @@ function requestDraw(st) {
     });
 }
 
+// The box being edited is drawn last so nothing covers its fill, outline or tag.
+function drawOrder(st) {
+    const order = [...st.regions.keys()];
+    if (st.active >= 0) order.push(order.splice(st.active, 1)[0]);
+    return order;
+}
+
 function tagAt(st, x, y) {
-    for (let i = st.regions.length - 1; i >= 0; i--) {
+    const order = drawOrder(st);
+    for (let n = order.length - 1; n >= 0; n--) {
+        const i = order[n];
         const r = st.tagRects[i];
         if (r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return i;
     }
     return -1;
+}
+
+// A tag belongs to its own box whatever is drawn over it, so it wins over
+// hit-testing and drags the box it labels.
+function hitAt(st, p, cycle) {
+    const tag = tagAt(st, p.x, p.y);
+    return tag >= 0 ? { index: tag, mode: "move" } : pick(st, p, cycle);
 }
 
 function draw(st) {
@@ -326,7 +342,7 @@ function draw(st) {
     }
 
     ctx.font = "bold 11px monospace";
-    for (let i = 0; i < st.regions.length; i++) {
+    for (const i of drawOrder(st)) {
         const b = st.regions[i];
         const active = i === st.active;
         const color = b.palette.find(Boolean) || "#8c8c8c";
@@ -1028,7 +1044,7 @@ function bindCanvas(st, node) {
         e.stopPropagation();
         canvas.focus();
         const p = pointerNorm(st, e);
-        const hit = pick(st, p, e.altKey);
+        const hit = hitAt(st, p, e.altKey);
         if (hit) {
             st.active = hit.index;
             st.drag = { mode: hit.mode, start: { ...st.regions[hit.index] }, origin: p };
@@ -1052,9 +1068,8 @@ function bindCanvas(st, node) {
             requestDraw(st);
             return;
         }
-        const hit = pick(st, p, false);
-        const hover = hit ? hit.index : -1;
         const hoverTag = tagAt(st, p.x, p.y);
+        const hover = hoverTag >= 0 ? hoverTag : pick(st, p, false)?.index ?? -1;
         st.canvas.style.cursor = hoverTag >= 0 ? "pointer" : "crosshair";
         if (hover !== st.hover || hoverTag !== st.hoverTag) {
             st.hover = hover;
@@ -1089,7 +1104,7 @@ function bindCanvas(st, node) {
 
     canvas.addEventListener("dblclick", (e) => {
         e.stopPropagation();
-        const hit = pick(st, pointerNorm(st, e), false);
+        const hit = hitAt(st, pointerNorm(st, e), false);
         if (hit) {
             st.active = hit.index;
             renderInspector(st, node);

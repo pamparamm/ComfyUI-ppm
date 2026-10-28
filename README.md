@@ -87,6 +87,7 @@ The stock box editor is a Vue-only widget: with Nodes 2.0 turned off, the classi
 - When `background` is connected, the canvas background and `width`/`height` are taken from the image after the node has run once.
 - `width`/`height` accept links (e.g. `Empty Latent Image (Aspect Ratio)` → `Latent to Width & Height`). The canvas adopts the size the node actually executed with and keeps the boxes in their relative positions in that frame.
 - A new value on the `bboxes` input re-initializes the canvas; canvas edits are kept until the upstream value changes again.
+- Clicking a box's number badge selects that box and raises it above the others, so a box can be picked out of a stack of overlapping ones.
 
 ### Attention Selectors
 
