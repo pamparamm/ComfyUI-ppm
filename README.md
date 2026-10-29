@@ -99,6 +99,10 @@ Load adapter weights before `Anima Ref Adapter (PPM)` with any LoRA loader (i.e.
 - For [circlestone-labs/Anima](https://huggingface.co/circlestone-labs/Anima) model: use [ElectronGirl/anima-ref-adapter](https://huggingface.co/ElectronGirl/anima-ref-adapter) - official adapter weights.
 - For [Gazingstars123/Anima-2.9B](https://huggingface.co/Gazingstars123/Anima-2.9B) model: use [pamparamm/anima-ref-adapter-2.9B-converted](https://huggingface.co/pamparamm/anima-ref-adapter-2.9B-converted) - converted by me, or convert official weights for Anima yourself by using [Anima2.9B-Lora-weight-conversion script by storyAura](https://github.com/storyAura/Anima2.9B-Lora-weight-conversion).
 
+Supported `adapter_arch`es:
+- `v2 (asymmetric)` for `anima_ref_adapter_v2`.
+- `v1 (joint)` for `anima_ref_adapter_pilot`. Also enable `pad_image` in `Anima Ref Conditioning (PPM)` for this arch.
+
 ### Attention Selectors
 
 `Model Attention Selector` and `CLIP Attention Selector` nodes, can be used to swap the optimized attention algorithm, such as pytorch (SDPA), sage (SageAttention), xformers, etc., without restarting ComfyUI.
