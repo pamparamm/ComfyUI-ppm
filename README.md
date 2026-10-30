@@ -89,19 +89,19 @@ The stock box editor is a Vue-only widget: with Nodes 2.0 turned off, the classi
 - A new value on the `bboxes` input re-initializes the canvas; canvas edits are kept until the upstream value changes again.
 - Clicking a box's number badge selects that box and raises it above the others, so a box can be picked out of a stack of overlapping ones.
 
-### Anima Ref Adapter (PPM) and Anima Ref Conditioning (PPM)
+### Anima Ref (PPM)
 
-Modified implementation of [ComfyUI-Anima-Ref-Adapter by ElectronGirl](https://github.com/ElectronGirl/ComfyUI-Anima-Ref-Adapter) that should be compatible with various model patches (i.e. CLIP NegPip) and guiders.
+Adds `Anima Ref (PPM)` node that can load various Anima reference adapters (placed in `models/loras` folder) and tune their settings. Almost all inputs have a description inside ComfyUI.
 
-Both `Anima Ref Adapter (PPM)` and `Anima Ref Conditioning (PPM)` nodes are required: the former is for tuning reference timesteps/strength and the latter is for padding and hooking reference image to positive/negative conds.
+Modified implementation of [ComfyUI-Anima-Ref-Adapter by ElectronGirl](https://github.com/ElectronGirl/ComfyUI-Anima-Ref-Adapter) and [SnapRef by 0ppxnhximxr](https://github.com/0ppxnhximxr/SnapRef) that should be compatible with various model patches (i.e. CLIP NegPip) and guiders.
 
-Load adapter weights before `Anima Ref Adapter (PPM)` with any LoRA loader (i.e. stock `Load LoRA` node):
-- For [circlestone-labs/Anima](https://huggingface.co/circlestone-labs/Anima) model: use [ElectronGirl/anima-ref-adapter](https://huggingface.co/ElectronGirl/anima-ref-adapter) - official adapter weights.
-- For [Gazingstars123/Anima-2.9B](https://huggingface.co/Gazingstars123/Anima-2.9B) model: use [pamparamm/anima-ref-adapter-2.9B-converted](https://huggingface.co/pamparamm/anima-ref-adapter-2.9B-converted) - converted by me, or convert official weights for Anima yourself by using [Anima2.9B-Lora-weight-conversion script by storyAura](https://github.com/storyAura/Anima2.9B-Lora-weight-conversion).
-
-Supported `adapter_arch`es:
-- `v2 (asymmetric)` for `anima_ref_adapter_v2`.
-- `v1 (joint)` for `anima_ref_adapter_pilot`. Also enable `pad_image` in `Anima Ref Conditioning (PPM)` for this arch.
+Supported adapters:
+- For [circlestone-labs/Anima](https://huggingface.co/circlestone-labs/Anima) - original adapters:
+    - [ElectronGirl/anima-ref-adapter](https://huggingface.co/ElectronGirl/anima-ref-adapter)
+    - [0ppxnhximxr/snapref-v1a](https://huggingface.co/0ppxnhximxr/snapref-v1a) / [0ppxnhximxr/snapref-v1b](https://huggingface.co/0ppxnhximxr/snapref-v1b)
+- For [Gazingstars123/Anima-2.9B](https://huggingface.co/Gazingstars123/Anima-2.9B) - converted adapters (using modified [Anima2.9B-Lora-weight-conversion script by storyAura](https://github.com/storyAura/Anima2.9B-Lora-weight-conversion)):
+    - [pamparamm/anima-ref-adapter-2.9B-converted](https://huggingface.co/pamparamm/anima-ref-adapter-2.9B-converted)
+    - [pamparamm/anima-snapref-2.9B-converted](https://huggingface.co/pamparamm/anima-snapref-2.9B-converted)
 
 ### Attention Selectors
 
