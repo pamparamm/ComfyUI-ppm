@@ -93,6 +93,8 @@ The stock box editor is a Vue-only widget: with Nodes 2.0 turned off, the classi
 
 Adds `Anima Ref (PPM)` node that can load various Anima reference adapters (placed in `models/loras` folder) and tune their settings. Almost all inputs have a description inside ComfyUI.
 
+<img src="docs/anima_ref.png" alt="Anima Ref (PPM)" width="800">
+
 Modified implementation of [ComfyUI-Anima-Ref-Adapter by ElectronGirl](https://github.com/ElectronGirl/ComfyUI-Anima-Ref-Adapter) and [SnapRef by 0ppxnhximxr](https://github.com/0ppxnhximxr/SnapRef) that should be compatible with various model patches (i.e. CLIP NegPip) and guiders.
 
 Supported adapters:
