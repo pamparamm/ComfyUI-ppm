@@ -1,4 +1,4 @@
-from typing import Any, Callable
+from typing import Callable
 
 import torch
 
@@ -53,14 +53,14 @@ def anima_extra_conds_negpip_wrapper(
 
 
 def cosmos_diffusion_negpip_wrapper(executor, *args, **kwargs):
-    context: torch.Tensor = args[2]
-    transformer_options: dict[str, Any] = kwargs.get("transformer_options", {})
     negpip_mask: torch.Tensor | None = kwargs.get(COND_NEGPIP_MASK_KEY)
 
-    if negpip_mask is not None:
-        transformer_options[NEGPIP_MASK_KEY] = negpip_mask.to(context)
+    if negpip_mask is None:
+        return executor(*args, **kwargs)
 
-    kwargs["transformer_options"] = transformer_options
+    context: torch.Tensor = args[2]
+    transformer_options_ = {**kwargs.get("transformer_options", {}), NEGPIP_MASK_KEY: negpip_mask.to(context)}
+    kwargs["transformer_options"] = transformer_options_
 
     return executor(*args, **kwargs)
 

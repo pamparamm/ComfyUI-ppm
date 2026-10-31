@@ -26,11 +26,14 @@ from comfy.model_sampling import ModelSamplingDiscrete
 from comfy.sd import VAE
 from comfy_api.latest import io
 
+from ..negpip.anima_negpip import COND_NEGPIP_MASK_KEY
+
 WRAPPER_KEY = "ppm_anima_ref"
 REF_LATENTS_KEY = "ppm_anima_ref_latents"
 REF_COND_KEY = "c_ppm_anima_ref_latents"
 REF_TEXT_KEY = "ppm_anima_ref_text"
 REF_TEXT_COND_KEY = "c_ppm_anima_ref_text"
+REF_TEXT_MASK_COND_KEY = "c_ppm_anima_ref_text_mask"
 INNER_KEY = "ppm_anima_ref_inner"
 
 
@@ -163,7 +166,10 @@ def anima_ref_extra_conds_wrapper(
         ref_text: dict[str, torch.Tensor] | None = kwargs.get(REF_TEXT_KEY)
         if ref_text is not None:
             # reuse the model's own text conditioning, including the t5 token ids some encoders return
-            out[REF_TEXT_COND_KEY] = previous_extra_conds(**{**kwargs, **ref_text})["c_crossattn"]
+            ref_out = previous_extra_conds(**{**kwargs, **ref_text})
+            out[REF_TEXT_COND_KEY] = ref_out["c_crossattn"]
+            if COND_NEGPIP_MASK_KEY in ref_out:
+                out[REF_TEXT_MASK_COND_KEY] = ref_out[COND_NEGPIP_MASK_KEY]
         return out
 
     return _wrapped(_anima_ref_extra_conds_wrapper, previous_extra_conds)
@@ -234,6 +240,7 @@ def anima_ref_joint_diffusion_wrapper(state: dict[str, Any]) -> Callable[..., to
     def _anima_ref_joint_diffusion_wrapper(executor, x, timesteps, context, fps=None, padding_mask=None, **kwargs):
         ref: torch.Tensor | None = kwargs.pop(REF_COND_KEY, None)
         kwargs.pop(REF_TEXT_COND_KEY, None)
+        kwargs.pop(REF_TEXT_MASK_COND_KEY, None)
         if ref is None:
             return executor(x, timesteps, context, fps, padding_mask, **kwargs)
         if ref.ndim == 4:
@@ -259,16 +266,19 @@ def anima_ref_capture_diffusion_wrapper(
     def _anima_ref_capture_diffusion_wrapper(executor, x, timesteps, context, fps=None, padding_mask=None, **kwargs):
         ref: torch.Tensor | None = kwargs.pop(REF_COND_KEY, None)
         ref_text: torch.Tensor | None = kwargs.pop(REF_TEXT_COND_KEY, None)
+        ref_text_mask: torch.Tensor | None = kwargs.pop(REF_TEXT_MASK_COND_KEY, None)
         outer_stream = state["stream"]
         state["stream"] = outer_stream or "tgt"
         try:
             return _anima_ref_capture_diffusion_inner(
-                executor, ref, ref_text, x, timesteps, context, fps, padding_mask, **kwargs
+                executor, ref, ref_text, ref_text_mask, x, timesteps, context, fps, padding_mask, **kwargs
             )
         finally:
             state["stream"] = outer_stream
 
-    def _anima_ref_capture_diffusion_inner(executor, ref, ref_text, x, timesteps, context, fps, padding_mask, **kwargs):
+    def _anima_ref_capture_diffusion_inner(
+        executor, ref, ref_text, ref_text_mask, x, timesteps, context, fps, padding_mask, **kwargs
+    ):
         if ref is None:
             if state["stream"] == "ref" or not state["kv"]:
                 return executor(x, timesteps, context, fps, padding_mask, **kwargs)
@@ -299,6 +309,8 @@ def anima_ref_capture_diffusion_wrapper(
         state["kv"] = [None] * len(dm.blocks)
         timestep = torch.zeros(ref.shape[0], dtype=timesteps.dtype, device=timesteps.device)
         state["stream"] = "ref"
+        # reference pass re-enters the diffusion model, so it gets its own negpip mask through the same cond
+        ref_negpip = {COND_NEGPIP_MASK_KEY: ref_text_mask[: ref.shape[0]]} if ref_text_mask is not None else {}
         try:
             dm(
                 ref,
@@ -306,6 +318,7 @@ def anima_ref_capture_diffusion_wrapper(
                 ref_text if ref_text is not None else context,
                 fps=fps,
                 transformer_options=kwargs.get("transformer_options"),
+                **ref_negpip,
             )
         finally:
             state["stream"] = "tgt"
@@ -511,7 +524,7 @@ def anima_ref_calc_cond_batch_wrapper(
     def without_ref_conds(conds: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
         if conds is None:
             return None
-        strip = (REF_COND_KEY, REF_TEXT_COND_KEY)
+        strip = (REF_COND_KEY, REF_TEXT_COND_KEY, REF_TEXT_MASK_COND_KEY)
         return [{**c, "model_conds": {k: v for k, v in c["model_conds"].items() if k not in strip}} for c in conds]
 
     def _anima_ref_calc_cond_batch_wrapper(

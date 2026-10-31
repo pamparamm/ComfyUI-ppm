@@ -122,17 +122,20 @@ def moss_diffusion_negpip_wrapper(patcher: ModelPatcher):
 
         diffusion_model: MOSSImageDIT = patcher.get_model_object("diffusion_model")  # type: ignore
         attentions = [block.comfy_attention.function for block in diffusion_model.layers]  # pyrefly: ignore[missing-attribute]
-        transformer_options[NEGPIP_WEIGHTING_KEY] = {
-            "n_img": n_img,
-            "n_text": context.shape[1],
-            "bias": bias,
-            "v_scale": v_scale,
-            "attentions": attentions,
-            "previous": transformer_options.get("optimized_attention_override"),
+        transformer_options_ = {
+            **transformer_options,
+            NEGPIP_WEIGHTING_KEY: {
+                "n_img": n_img,
+                "n_text": context.shape[1],
+                "bias": bias,
+                "v_scale": v_scale,
+                "attentions": attentions,
+                "previous": transformer_options.get("optimized_attention_override"),
+            },
+            "optimized_attention_override": moss_attention_negpip,
         }
-        transformer_options["optimized_attention_override"] = moss_attention_negpip
 
-        return executor(latent, timestep, context, transformer_options, **kwargs)
+        return executor(latent, timestep, context, transformer_options_, **kwargs)
 
     return _moss_diffusion_negpip_wrapper
 
