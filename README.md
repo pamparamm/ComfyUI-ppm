@@ -99,8 +99,9 @@ Modified implementation of [ComfyUI-Anima-Ref-Adapter by ArcAnima](https://githu
 
 Supported adapters (download and put them into `models/loras` folder):
 - For [circlestone-labs/Anima](https://huggingface.co/circlestone-labs/Anima) and [Gazingstars123/Anima-2.9B](https://huggingface.co/Gazingstars123/Anima-2.9B) (works without convertion):
-    - [0ppxnhximxr/snapref-v1a](https://huggingface.co/0ppxnhximxr/snapref-v1a) / [0ppxnhximxr/snapref-v1b](https://huggingface.co/0ppxnhximxr/snapref-v1b) / [0ppxnhximxr/snapref-v2a-pre2](https://huggingface.co/0ppxnhximxr/snapref-v2a-pre2)
+    - [0ppxnhximxr/snapref-v1a](https://huggingface.co/0ppxnhximxr/snapref-v1a) / [0ppxnhximxr/snapref-v1b](https://huggingface.co/0ppxnhximxr/snapref-v1b) / [0ppxnhximxr/snapref-v2a](https://huggingface.co/0ppxnhximxr/snapref-v2a) / [0ppxnhximxr/snapref-v2s](https://huggingface.co/0ppxnhximxr/snapref-v2s)
     - [ElectronGirl/anima-ref-adapter](https://huggingface.co/ElectronGirl/anima-ref-adapter)
+    - [AnticPan/Anima-Role-Ref-KV](https://huggingface.co/AnticPan/Anima-Role-Ref-KV)
 
 For adjusting additional settings like reference guidance strength or fidelity at the cost of inference speed, add `Anima Reference Guidance (PPM)` node after `Anima Reference (PPM)`.
 

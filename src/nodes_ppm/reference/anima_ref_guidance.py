@@ -26,34 +26,40 @@ def carry_reference(conds: list, reference: dict[str, Any], offset: float) -> li
     return [[cond[0], {**cond[1], **reference}] for cond in conds]
 
 
-def reference_correction(guided: torch.Tensor, cond: torch.Tensor, correction: str) -> torch.Tensor:
+def reference_correction(guided: torch.Tensor, cond: torch.Tensor, correction: str, multiplier: float) -> torch.Tensor:
     if correction == "apg":
         dims = tuple(range(1, guided.ndim))
         update = (guided - cond).float()
         unit = F.normalize(cond.float().flatten(1), dim=1).view_as(cond)
         update = update - (update * unit).sum(dim=dims, keepdim=True) * unit
-        return cond + update.to(guided.dtype)
-
-    return guided
+        corrected = cond + update.to(guided.dtype)
+    elif correction == "rescale":
+        dims = tuple(range(1, guided.ndim))
+        ratio = cond.std(dim=dims, keepdim=True) / guided.std(dim=dims, keepdim=True).clamp(min=1e-8)
+        corrected = guided * ratio.to(guided.dtype)
+    else:
+        return guided
+    return corrected * multiplier + guided * (1.0 - multiplier)
 
 
 def anima_ref_guidance_post_cfg(
-    ref_guidance: float, correction: str, sigma_start: float, sigma_end: float
+    ref_guidance: float, correction: str, multiplier: float, sigma_start: float, sigma_end: float
 ) -> Callable[[dict[str, Any]], torch.Tensor]:
     def _anima_ref_guidance_post_cfg(args: dict[str, Any]) -> torch.Tensor:
         sigma: float = float(args["sigma"][0])
-        uncond, uncond_denoised = args["uncond"], args["uncond_denoised"]
-        if uncond is None or uncond_denoised is None or sigma > sigma_start or sigma <= sigma_end:
+        if sigma > sigma_start or sigma <= sigma_end:
             return args["denoised"]
-        (base,) = comfy.samplers.calc_cond_batch(
-            args["model"],
-            [strip_ref_conds(uncond)],  # pyrefly: ignore[bad-argument-type]
-            args["input"],
-            args["sigma"],
-            args["model_options"],
-        )
-        guided = args["denoised"] + (ref_guidance - 1.0) * (uncond_denoised - base)
-        return reference_correction(guided, args["cond_denoised"], correction)
+        guided, uncond, uncond_denoised = args["denoised"], args["uncond"], args["uncond_denoised"]
+        if ref_guidance != 1.0 and uncond is not None and uncond_denoised is not None:
+            (base,) = comfy.samplers.calc_cond_batch(
+                args["model"],
+                [strip_ref_conds(uncond)],  # pyrefly: ignore[bad-argument-type]
+                args["input"],
+                args["sigma"],
+                args["model_options"],
+            )
+            guided = guided + (ref_guidance - 1.0) * (uncond_denoised - base)
+        return reference_correction(guided, args["cond_denoised"], correction, multiplier)
 
     return _anima_ref_guidance_post_cfg
 
@@ -90,10 +96,16 @@ class AnimaRefGuidancePPM(io.ComfyNode):
                 ),
                 io.Combo.Input(
                     "correction",
-                    options=["apg", "none"],
-                    default="apg",
-                    advanced=True,
-                    tooltip="Using APG may decrease oversaturation artifacts.",
+                    options=["none", "apg", "rescale"],
+                    default="none",
+                ),
+                io.Float.Input(
+                    "multiplier",
+                    default=0.7,
+                    min=0.0,
+                    max=1.0,
+                    step=0.01,
+                    tooltip="Correction strength.",
                 ),
                 io.Float.Input(
                     "start_percent",
@@ -124,14 +136,17 @@ class AnimaRefGuidancePPM(io.ComfyNode):
         positive, negative = kwargs["positive"], kwargs["negative"]
         ref_guidance: float = float(kwargs["ref_guidance"])
         fidelity: float = float(kwargs["fidelity"])
+        correction: str = kwargs["correction"]
+        multiplier: float = float(kwargs["multiplier"])
         reference = reference_values(positive) or reference_values(negative)
-        if reference is None or (ref_guidance == 1.0 and fidelity == 1.0):
+        if reference is None or (ref_guidance == 1.0 and fidelity == 1.0 and correction == "none"):
             return io.NodeOutput(model, positive, negative)
 
-        offset = 0.0 if fidelity >= 1.0 else math.log(max(1.0 - fidelity, 1e-6))
-        negative = carry_reference(negative, reference, offset)
+        if ref_guidance != 1.0 or fidelity < 1.0:
+            offset = 0.0 if fidelity >= 1.0 else math.log(max(1.0 - fidelity, 1e-6))
+            negative = carry_reference(negative, reference, offset)
 
-        if ref_guidance == 1.0:
+        if ref_guidance == 1.0 and correction == "none":
             return io.NodeOutput(model, positive, negative)
 
         m: ModelPatcher = model.clone()
@@ -139,11 +154,12 @@ class AnimaRefGuidancePPM(io.ComfyNode):
         m.set_model_sampler_post_cfg_function(
             anima_ref_guidance_post_cfg(
                 ref_guidance,
-                kwargs["correction"],
+                correction,
+                multiplier,
                 sampling.percent_to_sigma(kwargs["start_percent"]),
                 sampling.percent_to_sigma(kwargs["end_percent"]),
             ),
-            disable_cfg1_optimization=True,
+            disable_cfg1_optimization=ref_guidance != 1.0,
         )
         return io.NodeOutput(m, positive, negative)
 

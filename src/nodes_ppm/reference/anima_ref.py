@@ -16,6 +16,7 @@ from PIL import Image
 from safetensors import safe_open
 
 import comfy.conds
+import comfy.model_prefetch
 import comfy.patcher_extension
 import comfy.utils
 import folder_paths
@@ -50,13 +51,20 @@ class AnimaRefLoRA:
     scale: float
 
 
+@dataclass(slots=True)
+class AnimaRefBranch:
+    modes: tuple[str, ...]
+    modules: dict[str, AnimaRefLoRA]
+
+
 class AnimaRefAdapter:
     def __init__(self, path: str) -> None:
         with safe_open(path, "pt") as handle:
             metadata = handle.metadata() or {}
         snapref: dict[str, Any] = json.loads(metadata.get("anima_ref_kv", "{}"))
         anima_ref: dict[str, Any] = json.loads(metadata.get("anima_ref_adapter", "{}"))
-        if snapref.get("format") == "anima_ref_kv/1":
+        role_ref = metadata.get("anima_role_ref_kv_version")
+        if snapref.get("format") == "anima_ref_kv/1" or role_ref is not None:
             self.joint: bool = False
             self.t_index = float(snapref.get("ref_t", 10))
             self.offset_h = 0.0
@@ -65,6 +73,7 @@ class AnimaRefAdapter:
             self.ref_cross_attn = True
             self.ref_in_uncond: bool = False
             self.modes: list[str] = list(snapref.get("modes", []))
+            self.ref_megapixels = 0.5625 if role_ref is not None else 1.0
         elif len(anima_ref) > 0:
             slot = anima_ref.get("slots", {}).get("character", {})
             self.joint: bool = anima_ref.get("arch") != "asym"
@@ -75,15 +84,17 @@ class AnimaRefAdapter:
             self.ref_cross_attn: bool = bool(anima_ref.get("ref_cross_attn", True))
             self.ref_in_uncond: bool = True
             self.modes: list[str] = []
+            self.ref_megapixels = 1.0
         else:
             raise ValueError(f"{path} is not an Anima reference adapter")
         tensor_dict: dict[str, torch.Tensor] = comfy.utils.load_torch_file(path, safe_load=True)
         self.mode_embed: torch.Tensor | None = tensor_dict.get("anima_ref_kv.mode_embed")
         self.streams = self._streams(path, tensor_dict)
+        self.branches = self._branches(path, snapref, tensor_dict)
         self.blocks = {
             int(module.split(".")[1])
-            for stream in self.streams.values()
-            for module in stream
+            for weights in [*self.streams.values(), *(branch.modules for branch in self.branches.values())]
+            for module in weights
             if module.startswith("blocks.")
         }
 
@@ -124,12 +135,43 @@ class AnimaRefAdapter:
             raise ValueError(f"{path} is not an Anima reference adapter")
         return streams
 
+    @staticmethod
+    def _branches(
+        path: str, metadata: dict[str, Any], tensor_dict: dict[str, torch.Tensor]
+    ) -> dict[str, AnimaRefBranch]:
+        prefix = "anima_ref_kv.branch."
+        found: dict[str, dict[str, AnimaRefLoRA]] = {}
+        for key in tensor_dict:
+            if not key.startswith(prefix) or not key.endswith(".down"):
+                continue
+            stem = key[: -len(".down")]
+            name, module = stem[len(prefix) :].split(".", 1)
+            down = AnimaRefAdapter._weight(tensor_dict, stem + ".down")
+            up = AnimaRefAdapter._weight(tensor_dict, stem + ".up")
+            found.setdefault(name, {})[module] = AnimaRefLoRA(
+                down, up, float(tensor_dict[stem + ".alpha"]) / down.shape[0]
+            )
+        branches: dict[str, AnimaRefBranch] = {}
+        for name, spec in (metadata.get("branches") or {}).items():
+            if name not in found:
+                continue
+            if spec.get("stream") != "ref" or spec.get("combine", "add") != "add":
+                raise ValueError(f"{path} branch {name} needs the ref stream and the add combine")
+            branches[name] = AnimaRefBranch(tuple(spec.get("modes") or ()), found.pop(name))
+        if found:
+            raise ValueError(f"{path} has {', '.join(found)} branch weights without a branches metadata entry")
+        return branches
+
+    def get_branches(self, mode: str) -> list[AnimaRefBranch]:
+        return [branch for branch in self.branches.values() if mode in branch.modes]
+
 
 @dataclass(slots=True)
 class AnimaRefState:
     biases: tuple[float, ...] = ()
     sizes: list[int] = field(default_factory=list)
     kv: dict[int, RefKV] = field(default_factory=dict)
+    span: tuple[int, int] = (0, 0)
     stream: Literal["tgt", "ref"] = "tgt"
     joint: bool = False
     use_lora: bool = True
@@ -138,6 +180,18 @@ class AnimaRefState:
     @property
     def biased(self) -> bool:
         return any(bias != 0.0 for bias in self.biases)
+
+    def capture(self, index: int, k: torch.Tensor, v: torch.Tensor) -> None:
+        if index not in self.kv:
+            total = sum(self.sizes)
+            with comfy.model_prefetch.pause_malloc_graph():
+                self.kv[index] = (
+                    k.new_empty((k.shape[0], total, *k.shape[2:])),
+                    v.new_empty((v.shape[0], total, *v.shape[2:])),
+                )
+        start, end = self.span
+        self.kv[index][0][:, start:end].copy_(k)
+        self.kv[index][1][:, start:end].copy_(v)
 
 
 def _previous(func: Callable) -> Callable:
@@ -327,12 +381,15 @@ def anima_ref_capture_diffusion_wrapper(state: AnimaRefState, adapter: AnimaRefA
     ) -> None:
         dm = cast(MiniTrainDIT, executor.class_obj)
         patch = dm.patch_spatial
+        refs = [ref.unsqueeze(2) if ref.ndim == 4 else ref for ref in refs]
         tokens_h, tokens_w = -(-x.shape[-2] // patch), -(-x.shape[-1] // patch)
         negpip_mask: torch.Tensor | None = kwargs.get(COND_NEGPIP_MASK_KEY)
-        records: list[dict[int, RefKV]] = []
+        state.sizes = [
+            -(-ref.shape[2] // dm.patch_temporal) * -(-ref.shape[-2] // patch) * -(-ref.shape[-1] // patch)
+            for ref in refs
+        ]
+        state.kv, start = {}, 0
         for index, ref in enumerate(refs):
-            if ref.ndim == 4:
-                ref = ref.unsqueeze(2)
             if ref.shape[0] > 1 and not adapter.ref_cross_attn:
                 ref = ref[:1]
             ref_h, ref_w = -(-ref.shape[-2] // patch), -(-ref.shape[-1] // patch)
@@ -342,8 +399,8 @@ def anima_ref_capture_diffusion_wrapper(state: AnimaRefState, adapter: AnimaRefA
                 h_offset += round((tokens_h - ref_h) / 2)
                 w_offset += round((tokens_w - ref_w) / 2)
             state.ref_rope = (adapter.t_index, h_offset, w_offset)
-
-            state.kv = {}
+            state.span = (start, start + state.sizes[index])
+            start += state.sizes[index]
             timestep = torch.zeros(ref.shape[0], dtype=timesteps.dtype, device=timesteps.device)
             text = context if ref_texts is None or ref_texts[index] is None else ref_texts[index]
             ref_negpip = {COND_NEGPIP_MASK_KEY: negpip_mask[: ref.shape[0]]} if negpip_mask is not None else {}
@@ -352,15 +409,6 @@ def anima_ref_capture_diffusion_wrapper(state: AnimaRefState, adapter: AnimaRefA
                 dm(ref, timestep, text, fps=fps, transformer_options=kwargs.get("transformer_options"), **ref_negpip)
             finally:
                 state.stream = "tgt"
-            records.append(state.kv)
-        state.sizes = [record[0][0].shape[1] for record in records]
-        state.kv = {
-            block: (
-                torch.cat([record[block][0] for record in records], dim=1),
-                torch.cat([record[block][1] for record in records], dim=1),
-            )
-            for block in range(len(dm.blocks))
-        }
 
     def _anima_ref_capture_diffusion_wrapper(
         executor: comfy.patcher_extension.WrapperExecutor,
@@ -409,22 +457,27 @@ def anima_ref_lora_wrapper(
     previous_forward: Callable[..., torch.Tensor],
     state: AnimaRefState,
     streams: dict[str | None, AnimaRefLoRA],
-    strength_model: float,
+    strengths: dict[str | None, float],
+    branches: list[AnimaRefLoRA],
 ) -> Callable[..., torch.Tensor]:
     previous_forward = _previous(previous_forward)
+
+    def delta(lora: AnimaRefLoRA, x: torch.Tensor, strength: float) -> torch.Tensor:
+        if lora.down.device != x.device or lora.down.dtype != x.dtype:
+            lora.down, lora.up = lora.down.to(x.device, x.dtype), lora.up.to(x.device, x.dtype)
+        return torch.nn.functional.linear(torch.nn.functional.linear(x, lora.down), lora.up) * (lora.scale * strength)
 
     def _anima_ref_lora_wrapper(x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
         out = previous_forward(x, *args, **kwargs)
         if not state.use_lora:
             return out
-        lora = streams.get(state.stream, streams.get(None))
-        if lora is None:
-            return out
-        if lora.down.device != x.device or lora.down.dtype != x.dtype:
-            lora.down, lora.up = lora.down.to(x.device, x.dtype), lora.up.to(x.device, x.dtype)
-        return out + torch.nn.functional.linear(torch.nn.functional.linear(x, lora.down), lora.up) * (
-            lora.scale * strength_model
-        )
+        key: str | None = state.stream if state.stream in streams else None
+        if (lora := streams.get(key)) is not None:
+            out = out + delta(lora, x, strengths[key])
+        if state.stream == "ref":
+            for branch in branches:
+                out = out + delta(branch, x, strengths["ref"])
+        return out
 
     return _wrapped(_anima_ref_lora_wrapper, previous_forward)
 
@@ -461,7 +514,8 @@ def anima_ref_kv_wrapper(
         transformer_options: dict[str, Any] | None = None,
     ) -> torch.Tensor:
         if state.stream == "ref":
-            state.kv[index] = (k.peek(), v.peek())
+            if weight != 0.0:
+                state.capture(index, k.peek(), v.peek())
             return previous_compute_attention(q, k, v, transformer_options)
         if not state.kv or weight == 0.0:
             return previous_compute_attention(q, k, v, transformer_options)
@@ -600,6 +654,7 @@ def anima_ref_window_wrapper(
             return executor(model, [strip_ref_conds(c) for c in conds], x_in, timestep, model_options)
         finally:
             state.use_lora = True
+            state.kv = {}
 
     return _anima_ref_window_wrapper
 
@@ -612,7 +667,7 @@ class AnimaRefPPM(io.ComfyNode):
             display_name="Anima Reference (PPM)",
             category="model/patch/anima",
             search_aliases=["anima reference", "reference image", "character reference", "snapref"],
-            description="Applies anima_ref or snapref adapters to model and conds.\n"
+            description="Applies anima_ref, snapref or anima-role-ref-kv adapters to model and conds.\n"
             "References come from either `Reference Cond (PPM)` or `Reference Gallery (PPM)` nodes, each with its own strength and caption.",
             inputs=[
                 io.Model.Input("model"),
@@ -632,7 +687,7 @@ class AnimaRefPPM(io.ComfyNode):
                 io.Combo.Input(
                     "lora_name",
                     options=folder_paths.get_filename_list("loras"),
-                    tooltip="The name of the reference LoRA.\nSupported LoRAs: `anima-ref-adapter`, `snapref`.",
+                    tooltip="The name of the reference LoRA.\nSupported LoRAs: `anima-ref-adapter`, `snapref`, `anima-role-ref-kv`.",
                 ),
                 io.Float.Input(
                     "strength_model",
@@ -643,11 +698,19 @@ class AnimaRefPPM(io.ComfyNode):
                     advanced=True,
                     tooltip="How strongly to apply the adapter LoRA weights. Should be set to 1.0 in almost any case.",
                 ),
+                io.Float.Input(
+                    "strength_tgt",
+                    default=1.0,
+                    min=-100.0,
+                    max=100.0,
+                    step=0.01,
+                    advanced=True,
+                ),
                 io.Combo.Input(
                     "mode",
-                    options=["character and style", "character"],
+                    options=["character and style", "character", "style"],
                     default="character and style",
-                    tooltip="Reference modes, only for snapref adapters (correspond to `cs` and `char` modes).",
+                    tooltip="Reference modes, only for snapref adapters (correspond to `cs`, `char` and `style` modes).",
                 ),
                 io.Float.Input(
                     "ref_strength_gain",
@@ -661,12 +724,12 @@ class AnimaRefPPM(io.ComfyNode):
                 ),
                 io.Float.Input(
                     "ref_megapixels",
-                    default=1.0,
-                    min=0.25,
+                    default=0.0,
+                    min=0.0,
                     max=2.0,
                     step=0.05,
                     advanced=True,
-                    tooltip="Reference is shrunk to this resolution. Trained at 1.0.",
+                    tooltip="Reference is shrunk to this resolution.\n0.0 uses the resolution the adapter was trained at.",
                 ),
                 io.Combo.Input(
                     "multi_layout",
@@ -719,8 +782,6 @@ class AnimaRefPPM(io.ComfyNode):
         if not refs:
             return io.NodeOutput(kwargs["model"], kwargs["positive"], kwargs["negative"])
         m: ModelPatcher = kwargs["model"].clone()
-        num_blocks: int = len(cast(torch.nn.ModuleList, m.get_model_object("diffusion_model.blocks")))
-        weights: dict[int, float] = cls.parse_ref_blocks(kwargs["block_list"], num_blocks)
         strengths: list[float] = [strength for _, strength, _ in refs]
         norm: str = kwargs["strength_norm"]
         if norm == "reference count":
@@ -736,14 +797,21 @@ class AnimaRefPPM(io.ComfyNode):
             "extra_conds",
             anima_ref_extra_conds_wrapper(m.get_model_object("extra_conds"), m.get_model_object("process_latent_in")),
         )
-        cls.patch_lora(m, state, adapter, kwargs["strength_model"], adapter.block_map(num_blocks))
+        m.add_wrapper_with_key(
+            comfy.patcher_extension.WrappersMP.OUTER_SAMPLE, WRAPPER_KEY, anima_ref_clear_wrapper(state)
+        )
+        modes = {
+            "character and style": "cs",
+            "character": "char",
+            "style": "style",
+        }
+        mode = modes.get(kwargs["mode"], "cs")
+        cls.patch_lora(m, state, adapter, mode, kwargs["strength_model"], kwargs["strength_tgt"])
         if adapter.joint:
-            cls.patch_joint(m, state, weights, adapter, num_blocks)
+            cls.patch_joint(m, state, adapter, kwargs["block_list"])
         else:
-            modes = {"character and style": "cs", "character": "char"}
-            cls.patch_asym(m, state, weights, adapter, num_blocks, modes.get(kwargs["mode"], "cs"))
-        if kwargs["start_percent"] > 0.0 or kwargs["end_percent"] < 1.0:
-            cls.patch_window(m, state, kwargs["start_percent"], kwargs["end_percent"])
+            cls.patch_asym(m, state, adapter, kwargs["block_list"], mode)
+        cls.patch_window(m, state, kwargs["start_percent"], kwargs["end_percent"])
 
         vae: VAE = kwargs["vae"]
         values = {
@@ -826,7 +894,8 @@ class AnimaRefPPM(io.ComfyNode):
             ratio = vae.spacial_compression_encode()
             src = Image.fromarray((pixels[0].clamp(0, 1).cpu().numpy() * 255).round().astype(np.uint8))
             return AnimaRefPPM.pad(src, latent["samples"].shape[-1] * ratio, latent["samples"].shape[-2] * ratio)
-        scale = min(1.0, (megapixels * 1024 * 1024 / (pixels.shape[1] * pixels.shape[2])) ** 0.5)
+        trained = megapixels if megapixels > 0.0 else adapter.ref_megapixels
+        scale = min(1.0, (trained * 1024 * 1024 / (pixels.shape[1] * pixels.shape[2])) ** 0.5)
         width, height = (max(16, int(d * scale) // 16 * 16) for d in (pixels.shape[2], pixels.shape[1]))
         return comfy.utils.common_upscale(pixels.movedim(-1, 1), width, height, "lanczos", "disabled").movedim(1, -1)
 
@@ -851,12 +920,25 @@ class AnimaRefPPM(io.ComfyNode):
         return texts if any(texts) else None
 
     @staticmethod
+    def block_count(m: ModelPatcher) -> int:
+        return len(cast(torch.nn.ModuleList, m.get_model_object("diffusion_model.blocks")))
+
+    @staticmethod
     def patch_lora(
-        m: ModelPatcher, state: AnimaRefState, adapter: AnimaRefAdapter, strength_model: float, blocks: list[int]
+        m: ModelPatcher,
+        state: AnimaRefState,
+        adapter: AnimaRefAdapter,
+        mode: str,
+        strength_model: float,
+        strength_tgt: float,
     ) -> None:
-        if strength_model == 0.0:
+        strengths = {stream: strength_model * (strength_tgt if stream == "tgt" else 1.0) for stream in adapter.streams}
+        if not any(strengths.values()):
             return
+        blocks = adapter.block_map(AnimaRefPPM.block_count(m))
         modules = {module for stream in adapter.streams.values() for module in stream}
+        branches: list[AnimaRefBranch] = adapter.get_branches(mode) if adapter.modes else []
+        modules |= {module for branch in branches for module in branch.modules}
         for module in modules:
             if module.startswith("blocks."):
                 _, index, tail = module.split(".", 2)
@@ -869,18 +951,23 @@ class AnimaRefPPM(io.ComfyNode):
                 for stream, stream_weights in adapter.streams.items()
                 if module in stream_weights
             }
-            m.add_object_patch(name, anima_ref_lora_wrapper(m.get_model_object(name), state, streams, strength_model))
+            branch_loras = [branch.modules[module] for branch in branches if module in branch.modules]
+            m.add_object_patch(
+                name, anima_ref_lora_wrapper(m.get_model_object(name), state, streams, strengths, branch_loras)
+            )
         entries = [lora for stream in adapter.streams.values() for lora in stream.values()]
+        entries += [lora for branch in branches for lora in branch.modules.values()]
         anima_ref_lora_lifecycle(m, entries)
 
     @staticmethod
     def patch_joint(
         m: ModelPatcher,
         state: AnimaRefState,
-        weights: dict[int, float],
         adapter: AnimaRefAdapter,
-        num_blocks: int,
+        block_list: str,
     ) -> None:
+        num_blocks = AnimaRefPPM.block_count(m)
+        weights = AnimaRefPPM.parse_ref_blocks(block_list, num_blocks)
         m.add_object_patch(
             "diffusion_model.pos_embedder.forward",
             anima_ref_joint_rope_wrapper(
@@ -903,20 +990,17 @@ class AnimaRefPPM(io.ComfyNode):
     def patch_asym(
         m: ModelPatcher,
         state: AnimaRefState,
-        weights: dict[int, float],
         adapter: AnimaRefAdapter,
-        num_blocks: int,
+        block_list: str,
         mode: str,
     ) -> None:
+        num_blocks = AnimaRefPPM.block_count(m)
+        weights = AnimaRefPPM.parse_ref_blocks(block_list, num_blocks)
         if adapter.mode_embed is not None:
             if mode in adapter.modes:
                 name = "diffusion_model.t_embedding_norm.forward"
                 row = adapter.mode_embed[adapter.modes.index(mode)]
                 m.add_object_patch(name, anima_ref_mode_wrapper(m.get_model_object(name), state, row))
-            else:
-                logging.warning(
-                    f"Anima Reference (PPM): adapter has modes {adapter.modes}, '{mode}' is unknown, using the base embedding"
-                )
         m.add_object_patch(
             "diffusion_model.pos_embedder.forward",
             anima_ref_capture_rope_wrapper(
@@ -930,14 +1014,12 @@ class AnimaRefPPM(io.ComfyNode):
             WRAPPER_KEY,
             anima_ref_capture_diffusion_wrapper(state, adapter),
         )
-        m.add_wrapper_with_key(
-            comfy.patcher_extension.WrappersMP.OUTER_SAMPLE, WRAPPER_KEY, anima_ref_clear_wrapper(state)
-        )
         for index in range(num_blocks):
             name = f"diffusion_model.blocks.{index}.self_attn.compute_attention"
             attn = cast(Attention, m.get_model_object(f"diffusion_model.blocks.{index}.self_attn"))
             m.add_object_patch(
-                name, anima_ref_kv_wrapper(m.get_model_object(name), state, attn, index, weights.get(index, 1.0))
+                name,
+                anima_ref_kv_wrapper(m.get_model_object(name), state, attn, index, weights.get(index, 1.0)),
             )
             if not adapter.ref_cross_attn:
                 name = f"diffusion_model.blocks.{index}.cross_attn.compute_attention"
@@ -945,6 +1027,8 @@ class AnimaRefPPM(io.ComfyNode):
 
     @staticmethod
     def patch_window(m: ModelPatcher, state: AnimaRefState, start_percent: float, end_percent: float) -> None:
+        if start_percent <= 0.0 and end_percent >= 1.0:
+            return
         sampling = cast(ModelSamplingDiscrete, m.get_model_object("model_sampling"))
         m.add_wrapper_with_key(
             comfy.patcher_extension.WrappersMP.CALC_COND_BATCH,
