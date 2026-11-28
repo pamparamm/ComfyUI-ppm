@@ -1,3 +1,8 @@
+# MARK: User-defined
+.docs/
+
+
+# MARK: .gitignore templates from https://github.com/github/gitignore
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -267,5 +272,3 @@ nohup.out
 
 # Built Visual Studio Code Extensions
 *.vsix
-
-.docs/

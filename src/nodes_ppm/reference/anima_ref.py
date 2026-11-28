@@ -671,14 +671,14 @@ class AnimaRefPPM(io.ComfyNode):
             "References come from either `Reference Cond (PPM)` or `Reference Gallery (PPM)` nodes, each with its own strength and caption.",
             inputs=[
                 io.Model.Input("model"),
+                io.Conditioning.Input("positive"),
+                io.Conditioning.Input("negative"),
                 io.Clip.Input("clip"),
                 io.Vae.Input("vae"),
                 PPMRefCond.Input(
                     "ppm_ref_cond",
                     tooltip="Reference from Reference Cond (PPM) or Reference Gallery (PPM) nodes.",
                 ),
-                io.Conditioning.Input("positive"),
-                io.Conditioning.Input("negative"),
                 io.Latent.Input(
                     "latent",
                     optional=True,
